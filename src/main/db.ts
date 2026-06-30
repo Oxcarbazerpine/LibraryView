@@ -1,6 +1,7 @@
-import { app } from 'electron'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
+import { mkdirSync } from 'node:fs'
 import Database from 'better-sqlite3'
+import { getDataDir } from './settings'
 
 let db: Database.Database | null = null
 
@@ -10,7 +11,8 @@ export function getDb(): Database.Database {
 }
 
 export function initDb(): Database.Database {
-  const dbPath = process.env.LV_DB_PATH || join(app.getPath('userData'), 'libraryview.db')
+  const dbPath = process.env.LV_DB_PATH || join(getDataDir(), 'libraryview.db')
+  mkdirSync(dirname(dbPath), { recursive: true })
   const instance = new Database(dbPath)
   instance.pragma('journal_mode = WAL')
   instance.pragma('foreign_keys = ON')

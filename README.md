@@ -37,14 +37,15 @@ npm run package:dir  # 仅产出免安装目录 dist/win-unpacked/
 
 打包脚本通过 `cross-env` 将 electron-builder 缓存指到 `.ebcache/`（位于项目所在的本地卷）。原因：部分（尤其企业重定向的）`%LOCALAPPDATA%` 卷不支持原子重命名，electron-builder 解压工具时会报 `EXDEV`；放到正常本地卷即可避开。注意两点：① 该路径必须是**绝对路径**（electron-builder 不认相对路径，会退回默认缓存），目前硬编码为 `E:/Projects/LibraryView/.ebcache`，迁移项目时需同步修改；② `.ebcache` 已在 `build.files` 里排除，不会被打进安装包。
 
-## 数据位置
+## 配置与数据位置
 
-数据库与封面缓存放在同一个「数据目录」下，可在设置里更改（更改时自动把旧数据迁移过去并重启生效）：
+应用设置存放在**安装目录**下的 `config.json`（打包后 = 安装目录 / exe 同级；开发时 = 项目根）。其中的 `dataDir` 字段决定数据库与封面缓存的位置——这两者始终放在一起：
 
-- 数据库（单文件 SQLite）：`<数据目录>\libraryview.db`（books / reading_sessions / settings 三张表）
-- 封面缓存：`<数据目录>\covers\<书id>.png`（经 `lvimg://cover/<id>` 协议提供给界面）
+- 设置文件：`<安装目录>\config.json`（`dataDir` / `libraryPaths` / 阅读器 / 扫描等全部设置）
+- 数据库（单文件 SQLite）：`<dataDir>\libraryview.db`（books / reading_sessions / settings 表）
+- 封面缓存：`<dataDir>\covers\<书id>.png`（经 `lvimg://cover/<id>` 协议提供给界面）
 
-数据目录默认是 Electron 的 userData（`%APPDATA%\libraryview`）。一个极小的引导指针 `%APPDATA%\libraryview\config.json` 记录实际数据目录的位置——它必须独立于数据库之外（因为它决定了数据库在哪）；启动时据此用 `app.setPath('userData', …)` 把数据库、封面、以及 Electron 自身缓存一并重定向到该目录。开发版与打包版共用同一份指针与数据目录。
+`dataDir` 默认是 `%APPDATA%\libraryview`，可在「设置 → 数据目录」里更改——更改时会把旧数据库与封面迁移到新目录，然后重启生效。路径直接由设置决定，不做 `app.setPath` 重定向。Electron 框架自身的少量运行缓存仍按默认放在 `%APPDATA%\libraryview`（一次性缓存，非数据）。
 
 ## 进度同步说明
 

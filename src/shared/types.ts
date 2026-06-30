@@ -55,6 +55,8 @@ export interface ActiveSession {
 }
 
 export interface AppSettings {
+  /** 数据目录：数据库（libraryview.db）与封面缓存（covers/）所在 */
+  dataDir: string
   /** 书库根目录（支持多个） */
   libraryPaths: string[]
   /** 外部阅读器可执行文件路径 */

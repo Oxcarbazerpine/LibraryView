@@ -10,10 +10,8 @@ import { listBooks } from './books'
 import { getStats } from './stats'
 import { indexLibrary, backfillPageCounts } from './scanner'
 import { syncFromSumatra } from './sumatra'
-import { applyDataDir, getDataDir, writeDataDirPointer, migrateDataDir } from './paths'
 import { registerLvimgScheme, handleLvimg } from './protocol'
 
-applyDataDir()
 registerLvimgScheme()
 
 function createWindow(): void {
@@ -125,25 +123,6 @@ app.whenReady().then(async () => {
       console.log(report)
     } catch (e) {
       if (out) writeFileSync(out, 'SUMATRA ERROR: ' + (e as Error).message + '\n')
-    }
-    app.exit(0)
-    return
-  }
-
-  // 管理钩子：把数据目录迁移到 LV_SET_DATADIR（数据库+封面一起搬），并写引导指针
-  if (process.env.LV_SET_DATADIR) {
-    const out = process.env.LV_SMOKE_OUT
-    try {
-      const target = process.env.LV_SET_DATADIR
-      const oldDir = getDataDir()
-      closeDb()
-      const r = await migrateDataDir(oldDir, target)
-      writeDataDirPointer(target)
-      const report = `DATADIR set to ${target}; db ${r.db}; covers ${r.covers}; from ${oldDir}`
-      if (out) writeFileSync(out, report + '\n')
-      console.log(report)
-    } catch (e) {
-      if (out) writeFileSync(out, 'DATADIR ERROR: ' + (e as Error).message + '\n')
     }
     app.exit(0)
     return

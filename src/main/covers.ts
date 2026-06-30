@@ -1,11 +1,11 @@
-import { app } from 'electron'
 import { mkdir, readFile, writeFile, access, readdir, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { getBook, setCover, clearAllCovers } from './books'
+import { getDataDir } from './settings'
 
-/** 封面缓存目录：始终在数据目录下（userData/covers；userData 已按数据目录设置重定向）。 */
+/** 封面缓存目录：始终在数据目录下（<dataDir>/covers）。 */
 export function coversDirectory(): string {
-  return join(app.getPath('userData'), 'covers')
+  return join(getDataDir(), 'covers')
 }
 
 let pdfjsP: Promise<typeof import('pdfjs-dist/legacy/build/pdf.mjs')> | null = null

@@ -1,6 +1,6 @@
 import { ipcMain, dialog, app } from 'electron'
 import { resolve } from 'node:path'
-import { getSettings, updateSettings } from './settings'
+import { getSettings, updateSettings, getDataDir } from './settings'
 import * as books from './books'
 import * as sessions from './sessions'
 import { getStats } from './stats'
@@ -8,7 +8,7 @@ import { runScan } from './scanner'
 import { ensureCover, clearCoverCache } from './covers'
 import { reconfigureJobs, stopJobs } from './jobs'
 import { closeDb } from './db'
-import { getDataDir, writeDataDirPointer, migrateDataDir } from './paths'
+import { migrateDataDir } from './paths'
 import { broadcast } from './events'
 import type { AppSettings, BookStatus } from '../shared/types'
 
@@ -83,7 +83,7 @@ export function registerIpc(): void {
       await stopJobs()
       closeDb()
       await migrateDataDir(oldDir, newDir)
-      writeDataDirPointer(newDir)
+      updateSettings({ dataDir: newDir })
     } catch (e) {
       return { changed: false, error: (e as Error).message }
     }
