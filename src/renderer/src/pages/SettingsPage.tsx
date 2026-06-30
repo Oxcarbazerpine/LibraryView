@@ -159,7 +159,9 @@ export function SettingsPage() {
                 className="flex-1 truncate rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-400"
                 title={s.coverCacheDir ?? ''}
               >
-                {s.coverCacheDir || <span className="text-slate-600">默认（应用数据目录 / covers）</span>}
+                {s.coverCacheDir || (
+                  <span className="text-slate-600">默认 · 与数据库同目录（应用数据目录\covers）</span>
+                )}
               </div>
               <button
                 onClick={() => void pickCoverDir()}

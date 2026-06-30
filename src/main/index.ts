@@ -135,7 +135,8 @@ app.whenReady().then(async () => {
     try {
       const target = process.env.LV_SET_COVERDIR
       const oldDir = coversDirectory()
-      updateSettings({ coverCacheDir: target })
+      // 'default' => 设回 null（默认 userData/covers，永远与数据库同目录）
+      updateSettings({ coverCacheDir: target === 'default' ? null : target })
       const newDir = coversDirectory()
       const moved = await moveCoverCache(oldDir, newDir)
       const report = `COVERDIR set to ${newDir}; moved ${moved} from ${oldDir}`
