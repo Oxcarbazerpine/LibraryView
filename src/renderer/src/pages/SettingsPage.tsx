@@ -178,7 +178,7 @@ export function SettingsPage() {
               )}
             </div>
             <p className="mt-1.5 text-xs text-slate-500">
-              PDF 首页缩略图缓存在这里（按「书id.png」）。改目录后封面会在浏览时于新目录重新生成。
+              PDF 首页缩略图缓存在这里（按「书id.png」）。改目录后已有封面会自动移动到新目录。
             </p>
           </div>
           <div className="flex items-center justify-between py-2">

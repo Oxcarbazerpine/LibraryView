@@ -4,7 +4,7 @@ import * as books from './books'
 import * as sessions from './sessions'
 import { getStats } from './stats'
 import { runScan } from './scanner'
-import { ensureCover, clearCoverCache } from './covers'
+import { ensureCover, clearCoverCache, coversDirectory, moveCoverCache } from './covers'
 import { reconfigureJobs } from './jobs'
 import { broadcast } from './events'
 import type { AppSettings, BookStatus } from '../shared/types'
@@ -12,6 +12,9 @@ import type { AppSettings, BookStatus } from '../shared/types'
 export function registerIpc(): void {
   ipcMain.handle('settings:get', () => getSettings())
   ipcMain.handle('settings:update', async (_e, patch: Partial<AppSettings>) => {
+    // 切换封面目录前先记下旧目录，更新后把已缓存封面搬过去
+    const movingCovers = 'coverCacheDir' in patch
+    const oldCoverDir = movingCovers ? coversDirectory() : null
     const next = updateSettings(patch)
     // 库目录 / 扫描间隔 / 进度同步相关变化时重建监听与定时器
     if (
@@ -22,10 +25,10 @@ export function registerIpc(): void {
     ) {
       void reconfigureJobs()
     }
-    // 切换封面目录：清空封面指针，浏览时在新目录重新生成
-    if ('coverCacheDir' in patch) {
-      books.clearAllCovers()
-      broadcast('books:changed')
+    // 切换封面目录：把已有封面移到新目录（保留，无需重新渲染）
+    if (movingCovers && oldCoverDir) {
+      const moved = await moveCoverCache(oldCoverDir, coversDirectory())
+      if (moved > 0) broadcast('books:changed')
     }
     return next
   })
