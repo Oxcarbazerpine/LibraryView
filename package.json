@@ -13,8 +13,8 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "rebuild": "electron-rebuild -f",
-    "package": "electron-vite build && cross-env ELECTRON_BUILDER_CACHE=.ebcache electron-builder --win",
-    "package:dir": "electron-vite build && cross-env ELECTRON_BUILDER_CACHE=.ebcache electron-builder --win --dir"
+    "package": "electron-vite build && cross-env ELECTRON_BUILDER_CACHE=E:/Projects/LibraryView/.ebcache electron-builder --win",
+    "package:dir": "electron-vite build && cross-env ELECTRON_BUILDER_CACHE=E:/Projects/LibraryView/.ebcache electron-builder --win --dir"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.1",
@@ -55,7 +55,9 @@
       "!electron.vite.config.ts",
       "!tsconfig*.json",
       "!build/**",
-      "!dist/**"
+      "!dist/**",
+      "!.ebcache/**",
+      "!.ebcache"
     ],
     "win": {
       "target": [

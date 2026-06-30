@@ -35,7 +35,7 @@ npm run package      # 产出 NSIS 安装包到 dist/
 npm run package:dir  # 仅产出免安装目录 dist/win-unpacked/
 ```
 
-打包脚本通过 `cross-env` 将 electron-builder 缓存指到项目内 `.ebcache/`。这是因为部分（尤其企业重定向的）`%LOCALAPPDATA%` 卷不支持原子重命名，会导致 electron-builder 解压工具时报 `EXDEV`；改用项目内本地卷的缓存即可避开。
+打包脚本通过 `cross-env` 将 electron-builder 缓存指到 `.ebcache/`（位于项目所在的本地卷）。原因：部分（尤其企业重定向的）`%LOCALAPPDATA%` 卷不支持原子重命名，electron-builder 解压工具时会报 `EXDEV`；放到正常本地卷即可避开。注意两点：① 该路径必须是**绝对路径**（electron-builder 不认相对路径，会退回默认缓存），目前硬编码为 `E:/Projects/LibraryView/.ebcache`，迁移项目时需同步修改；② `.ebcache` 已在 `build.files` 里排除，不会被打进安装包。
 
 ## 数据位置
 

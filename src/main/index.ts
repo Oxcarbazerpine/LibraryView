@@ -10,6 +10,7 @@ import { listBooks } from './books'
 import { getStats } from './stats'
 import { indexLibrary, backfillPageCounts } from './scanner'
 import { syncFromSumatra } from './sumatra'
+import { coversDirectory, moveCoverCache } from './covers'
 import { registerLvimgScheme, handleLvimg } from './protocol'
 
 registerLvimgScheme()
@@ -124,6 +125,26 @@ app.whenReady().then(async () => {
     } catch (e) {
       if (out) writeFileSync(out, 'SUMATRA ERROR: ' + (e as Error).message + '\n')
     }
+    app.exit(0)
+    return
+  }
+
+  // 管理钩子：把封面缓存目录设为 LV_SET_COVERDIR 并把已有封面搬过去
+  if (process.env.LV_SET_COVERDIR) {
+    const out = process.env.LV_SMOKE_OUT
+    try {
+      const target = process.env.LV_SET_COVERDIR
+      const oldDir = coversDirectory()
+      updateSettings({ coverCacheDir: target })
+      const newDir = coversDirectory()
+      const moved = await moveCoverCache(oldDir, newDir)
+      const report = `COVERDIR set to ${newDir}; moved ${moved} from ${oldDir}`
+      if (out) writeFileSync(out, report + '\n')
+      console.log(report)
+    } catch (e) {
+      if (out) writeFileSync(out, 'COVERDIR ERROR: ' + (e as Error).message + '\n')
+    }
+    closeDb()
     app.exit(0)
     return
   }
