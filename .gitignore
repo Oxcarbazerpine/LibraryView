@@ -1,6 +1,8 @@
 node_modules/
 out/
 dist/
+.ebcache/
 *.log
+*.tsbuildinfo
 .DS_Store
 .vite/

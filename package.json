@@ -12,20 +12,15 @@
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
-    "rebuild": "electron-rebuild -f"
+    "rebuild": "electron-rebuild -f",
+    "package": "electron-vite build && cross-env ELECTRON_BUILDER_CACHE=.ebcache electron-builder --win",
+    "package:dir": "electron-vite build && cross-env ELECTRON_BUILDER_CACHE=.ebcache electron-builder --win --dir"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.1",
     "better-sqlite3": "^12.11.1",
     "chokidar": "^5.0.0",
-    "clsx": "^2.1.1",
-    "date-fns": "^4.4.0",
-    "lucide-react": "^1.22.0",
-    "pdf-lib": "^1.17.1",
-    "pdfjs-dist": "^6.1.200",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
-    "recharts": "^3.9.0"
+    "pdfjs-dist": "^6.1.200"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.6",
@@ -35,10 +30,48 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.2.0",
+    "cross-env": "^10.1.0",
     "electron": "^42.5.1",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
+    "lucide-react": "^1.22.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "tailwindcss": "^4.3.1",
     "typescript": "^6.0.3",
     "vite": "^7.3.6"
+  },
+  "build": {
+    "appId": "com.libraryview.app",
+    "productName": "LibraryView",
+    "asar": false,
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "!src/**",
+      "!**/*.tsbuildinfo",
+      "!electron.vite.config.ts",
+      "!tsconfig*.json",
+      "!build/**",
+      "!dist/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "LibraryView"
+    }
   }
 }
