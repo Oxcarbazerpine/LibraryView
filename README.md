@@ -39,10 +39,12 @@ npm run package:dir  # 仅产出免安装目录 dist/win-unpacked/
 
 ## 数据位置
 
-- 数据库（单文件 SQLite）：`%APPDATA%\libraryview\libraryview.db`（books / reading_sessions / settings 三张表）
-- 封面缓存：`%APPDATA%\libraryview\covers\<书id>.png`（可在设置里改目录；经 `lvimg://cover/<id>` 协议提供给界面）
+数据库与封面缓存放在同一个「数据目录」下，可在设置里更改（更改时自动把旧数据迁移过去并重启生效）：
 
-开发版与打包版共用同一数据目录。
+- 数据库（单文件 SQLite）：`<数据目录>\libraryview.db`（books / reading_sessions / settings 三张表）
+- 封面缓存：`<数据目录>\covers\<书id>.png`（经 `lvimg://cover/<id>` 协议提供给界面）
+
+数据目录默认是 Electron 的 userData（`%APPDATA%\libraryview`）。一个极小的引导指针 `%APPDATA%\libraryview\config.json` 记录实际数据目录的位置——它必须独立于数据库之外（因为它决定了数据库在哪）；启动时据此用 `app.setPath('userData', …)` 把数据库、封面、以及 Electron 自身缓存一并重定向到该目录。开发版与打包版共用同一份指针与数据目录。
 
 ## 进度同步说明
 

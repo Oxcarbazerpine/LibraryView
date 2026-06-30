@@ -1,20 +1,20 @@
-import { ipcMain, dialog } from 'electron'
+import { ipcMain, dialog, app } from 'electron'
+import { resolve } from 'node:path'
 import { getSettings, updateSettings } from './settings'
 import * as books from './books'
 import * as sessions from './sessions'
 import { getStats } from './stats'
 import { runScan } from './scanner'
-import { ensureCover, clearCoverCache, coversDirectory, moveCoverCache } from './covers'
-import { reconfigureJobs } from './jobs'
+import { ensureCover, clearCoverCache } from './covers'
+import { reconfigureJobs, stopJobs } from './jobs'
+import { closeDb } from './db'
+import { getDataDir, writeDataDirPointer, migrateDataDir } from './paths'
 import { broadcast } from './events'
 import type { AppSettings, BookStatus } from '../shared/types'
 
 export function registerIpc(): void {
   ipcMain.handle('settings:get', () => getSettings())
-  ipcMain.handle('settings:update', async (_e, patch: Partial<AppSettings>) => {
-    // 切换封面目录前先记下旧目录，更新后把已缓存封面搬过去
-    const movingCovers = 'coverCacheDir' in patch
-    const oldCoverDir = movingCovers ? coversDirectory() : null
+  ipcMain.handle('settings:update', (_e, patch: Partial<AppSettings>) => {
     const next = updateSettings(patch)
     // 库目录 / 扫描间隔 / 进度同步相关变化时重建监听与定时器
     if (
@@ -24,11 +24,6 @@ export function registerIpc(): void {
       'sumatraSettingsPath' in patch
     ) {
       void reconfigureJobs()
-    }
-    // 切换封面目录：把已有封面移到新目录（保留，无需重新渲染）
-    if (movingCovers && oldCoverDir) {
-      const moved = await moveCoverCache(oldCoverDir, coversDirectory())
-      if (moved > 0) broadcast('books:changed')
     }
     return next
   })
@@ -76,5 +71,25 @@ export function registerIpc(): void {
   ipcMain.handle('cover:clearCache', async () => {
     await clearCoverCache()
     broadcast('books:changed')
+  })
+
+  // 数据目录：获取 + 更改（迁移数据库与封面，然后重启生效）
+  ipcMain.handle('data:getDir', () => getDataDir())
+  ipcMain.handle('data:setDir', async (_e, newDir: string) => {
+    const oldDir = getDataDir()
+    if (!newDir || !newDir.trim()) return { changed: false, error: '路径为空' }
+    if (resolve(newDir) === resolve(oldDir)) return { changed: false }
+    try {
+      await stopJobs()
+      closeDb()
+      await migrateDataDir(oldDir, newDir)
+      writeDataDirPointer(newDir)
+    } catch (e) {
+      return { changed: false, error: (e as Error).message }
+    }
+    // 重启使新目录生效（打包后无缝重启；开发模式仅退出，需手动再启动）
+    if (app.isPackaged) app.relaunch()
+    setTimeout(() => app.exit(0), 250)
+    return { changed: true }
   })
 }

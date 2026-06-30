@@ -1,11 +1,17 @@
-import { useState, type ReactNode } from 'react'
-import { FolderOpen, Plus, X, RotateCw, FileText, FolderTree, Image as ImageIcon } from 'lucide-react'
+import { useState, useEffect, type ReactNode } from 'react'
+import { FolderOpen, Plus, X, RotateCw, FileText, FolderTree, Database } from 'lucide-react'
 import { useLibrary } from '@/store'
 
 export function SettingsPage() {
   const { settings, saveSettings, rescan, scan } = useLibrary()
   const [adding, setAdding] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const [dataDir, setDataDirState] = useState<string | null>(null)
+  const [migrating, setMigrating] = useState(false)
+
+  useEffect(() => {
+    void window.api.getDataDir().then(setDataDirState)
+  }, [])
 
   if (!settings) return null
   const s = settings
@@ -32,9 +38,17 @@ export function SettingsPage() {
     const f = await window.api.pickFile([{ name: '设置文件', extensions: ['txt'] }])
     if (f) await saveSettings({ sumatraSettingsPath: f })
   }
-  const pickCoverDir = async (): Promise<void> => {
-    const d = await window.api.pickFolder()
-    if (d) await saveSettings({ coverCacheDir: d })
+  const changeDataDir = async (): Promise<void> => {
+    const dir = await window.api.pickFolder()
+    if (!dir || dir === dataDir) return
+    if (!window.confirm(`将把数据库与封面迁移到：\n${dir}\n并重启应用以生效。确定吗？`)) return
+    setMigrating(true)
+    const res = await window.api.setDataDir(dir)
+    if (!res.changed) {
+      setMigrating(false)
+      if (res.error) window.alert('更改失败：' + res.error)
+    }
+    // 成功后应用会自动重启（打包版）或退出（开发模式需手动再启动）
   }
   const clearCovers = async (): Promise<void> => {
     setClearing(true)
@@ -150,40 +164,31 @@ export function SettingsPage() {
           </div>
         </Section>
 
-        {/* 封面 */}
-        <Section title="封面" icon={<ImageIcon className="h-4 w-4" />}>
+        {/* 数据目录 */}
+        <Section title="数据目录" icon={<Database className="h-4 w-4" />}>
           <div className="py-2">
-            <div className="text-sm text-slate-200">封面缓存目录</div>
+            <div className="text-sm text-slate-200">数据库与封面缓存的位置</div>
             <div className="mt-1.5 flex items-center gap-2">
               <div
                 className="flex-1 truncate rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-400"
-                title={s.coverCacheDir ?? ''}
+                title={dataDir ?? ''}
               >
-                {s.coverCacheDir || (
-                  <span className="text-slate-600">默认 · 与数据库同目录（应用数据目录\covers）</span>
-                )}
+                {dataDir || <span className="text-slate-600">加载中…</span>}
               </div>
               <button
-                onClick={() => void pickCoverDir()}
-                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200 hover:bg-white/10"
+                onClick={() => void changeDataDir()}
+                disabled={migrating}
+                className="shrink-0 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200 hover:bg-white/10 disabled:opacity-50"
               >
-                选择目录
+                {migrating ? '迁移中…' : '更改目录'}
               </button>
-              {s.coverCacheDir && (
-                <button
-                  onClick={() => void saveSettings({ coverCacheDir: null })}
-                  className="rounded-lg p-2 text-slate-500 hover:bg-white/10 hover:text-rose-400"
-                  title="恢复默认"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
             </div>
-            <p className="mt-1.5 text-xs text-slate-500">
-              PDF 首页缩略图缓存在这里（按「书id.png」）。改目录后已有封面会自动移动到新目录。
+            <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
+              数据库（<code className="text-slate-400">libraryview.db</code>）与封面缓存（
+              <code className="text-slate-400">covers/</code>）始终一起放在这里。更改时会把旧数据迁移过去，然后重启应用生效。
             </p>
           </div>
-          <div className="flex items-center justify-between py-2">
+          <div className="flex items-center justify-between border-t border-white/5 py-2 pt-3">
             <div className="pr-4">
               <div className="text-sm text-slate-200">清空封面缓存</div>
               <div className="text-xs text-slate-500">删除所有已缓存封面；之后浏览会重新生成。</div>

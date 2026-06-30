@@ -28,6 +28,9 @@ const api: LibraryViewApi = {
   ensureCover: (id) => ipcRenderer.invoke('cover:ensure', id),
   clearCoverCache: () => ipcRenderer.invoke('cover:clearCache'),
 
+  getDataDir: () => ipcRenderer.invoke('data:getDir'),
+  setDataDir: (dir) => ipcRenderer.invoke('data:setDir', dir),
+
   onBooksChanged: (cb) => subscribe('books:changed', () => cb()),
   onScanProgress: (cb) => subscribe('scan:progress', (p) => cb(p as never)),
   onSessionChanged: (cb) => subscribe('session:changed', (s) => cb(s as never))

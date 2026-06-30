@@ -26,8 +26,7 @@ function defaults(): AppSettings {
     sumatraSettingsPath: detectSumatraSettings(),
     autoSyncProgress: true,
     scanIntervalMinutes: 30,
-    scanOnStartup: true,
-    coverCacheDir: null
+    scanOnStartup: true
   }
 }
 

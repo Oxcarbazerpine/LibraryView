@@ -1,13 +1,10 @@
 import { app } from 'electron'
-import { mkdir, readFile, writeFile, access, readdir, unlink, rename, copyFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile, access, readdir, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { getBook, setCover, clearAllCovers } from './books'
-import { getSettings } from './settings'
 
-/** 封面缓存目录：优先用设置里的自定义目录，否则用 userData/covers。 */
+/** 封面缓存目录：始终在数据目录下（userData/covers；userData 已按数据目录设置重定向）。 */
 export function coversDirectory(): string {
-  const custom = getSettings().coverCacheDir
-  if (custom && custom.trim()) return custom
   return join(app.getPath('userData'), 'covers')
 }
 
@@ -149,35 +146,6 @@ export async function ensureCover(bookId: number): Promise<string | null> {
 
   inflight.set(bookId, task)
   return task
-}
-
-/** 切换缓存目录时把已有封面从旧目录移到新目录（跨盘 rename 会失败，回退复制+删除）。返回移动数量。 */
-export async function moveCoverCache(fromDir: string, toDir: string): Promise<number> {
-  if (!fromDir || !toDir || fromDir === toDir) return 0
-  let moved = 0
-  try {
-    await mkdir(toDir, { recursive: true })
-    const files = await readdir(fromDir)
-    for (const f of files) {
-      if (!f.toLowerCase().endsWith('.png')) continue
-      const src = join(fromDir, f)
-      const dst = join(toDir, f)
-      try {
-        await rename(src, dst)
-      } catch {
-        try {
-          await copyFile(src, dst)
-          await unlink(src)
-        } catch {
-          continue
-        }
-      }
-      moved++
-    }
-  } catch {
-    /* 旧目录可能不存在 */
-  }
-  return moved
 }
 
 /** 清空封面缓存：删除缓存目录下所有 png 并重置数据库中的封面指针。 */

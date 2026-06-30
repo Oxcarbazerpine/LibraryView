@@ -66,8 +66,6 @@ export interface AppSettings {
   /** 定时扫描间隔（分钟，0=关闭定时扫描） */
   scanIntervalMinutes: number
   scanOnStartup: boolean
-  /** 封面缓存目录；null=默认（userData/covers） */
-  coverCacheDir: string | null
 }
 
 export interface DailyReadingStat {
@@ -142,6 +140,11 @@ export interface LibraryViewApi {
   // 封面（按需渲染 PDF 首页并缓存，返回封面文件路径或 null）
   ensureCover: (id: number) => Promise<string | null>
   clearCoverCache: () => Promise<void>
+
+  // 数据目录（数据库 + 封面所在的根目录；更改后会迁移旧数据并重启生效）
+  getDataDir: () => Promise<string>
+  setDataDir: (dir: string) => Promise<{ changed: boolean; error?: string }>
+
 
   // 事件订阅（返回取消订阅函数）
   onBooksChanged: (cb: () => void) => () => void
