@@ -1,4 +1,4 @@
-import { readFile, readdir, stat } from 'node:fs/promises'
+import { readdir, stat } from 'node:fs/promises'
 import type { Dirent } from 'node:fs'
 import { join, extname, basename } from 'node:path'
 import { getSettings } from './settings'
@@ -10,6 +10,7 @@ import {
   setPageCount,
   type ScannedBook
 } from './books'
+import { workerPageCount } from './pdf-pool'
 import { broadcast } from './events'
 import type { BookFormat, ScanResult, ScanProgress } from '../shared/types'
 
@@ -27,32 +28,6 @@ const SKIP_DIRS = new Set(['$RECYCLE.BIN', 'System Volume Information', 'node_mo
 function titleFromFilename(file: string): string {
   const t = basename(file, extname(file)).replace(/_+/g, ' ').trim()
   return t || basename(file)
-}
-
-// ---------- PDF 页数（pdfjs 懒解析，比 pdf-lib 快 ~40 倍且更健壮） ----------
-
-let pdfjsPromise: Promise<typeof import('pdfjs-dist/legacy/build/pdf.mjs')> | null = null
-function getPdfjs(): Promise<typeof import('pdfjs-dist/legacy/build/pdf.mjs')> {
-  if (!pdfjsPromise) pdfjsPromise = import('pdfjs-dist/legacy/build/pdf.mjs')
-  return pdfjsPromise
-}
-
-async function pdfPageCount(path: string): Promise<number | null> {
-  try {
-    const pdfjs = await getPdfjs()
-    const data = new Uint8Array(await readFile(path))
-    const task = pdfjs.getDocument({ data, isEvalSupported: false, useSystemFonts: false })
-    const doc = await task.promise
-    const n: number = doc.numPages
-    try {
-      await task.destroy()
-    } catch {
-      /* ignore */
-    }
-    return Number.isFinite(n) && n > 0 ? n : null
-  } catch {
-    return null
-  }
 }
 
 // ---------- 目录遍历 ----------
@@ -154,23 +129,18 @@ export async function backfillPageCounts(
     }
 
     let processed = 0
-    let cursor = 0
-    const CONCURRENCY = 4
-
-    const worker = async (): Promise<void> => {
-      while (cursor < pending.length) {
-        const item = pending[cursor++]
-        const count = await pdfPageCount(item.path)
+    // 页数计算在独立 utilityProcess 中进行（并发由 pdf-pool 限制），主进程只更新数据库与进度
+    await Promise.all(
+      pending.map(async (item) => {
+        const count = await workerPageCount(item.path)
         setPageCount(item.id, count ?? 0) // 0 = 已尝试但失败/未知，避免每次重扫
         processed++
-        if (onProgress && (processed % 10 === 0 || processed === total)) {
+        if (onProgress && (processed % 20 === 0 || processed === total)) {
           onProgress({ phase: 'pagecount', processed, total, currentPath: item.path })
         }
-        if (processed % 250 === 0) broadcast('books:changed')
-      }
-    }
-
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, total) }, worker))
+        if (processed % 1000 === 0) broadcast('books:changed')
+      })
+    )
     onProgress?.({ phase: 'done', processed, total })
     broadcast('books:changed')
   } finally {

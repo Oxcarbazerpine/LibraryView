@@ -5,7 +5,8 @@ import { initDb, closeDb } from './db'
 import { closeDanglingSessions } from './sessions'
 import { registerIpc } from './ipc'
 import { startJobs, stopJobs } from './jobs'
-import { getSettings, updateSettings } from './settings'
+import { stopPdfWorker, workerPageCount, workerRenderCover } from './pdf-pool'
+import { getSettings, updateSettings, getDataDir } from './settings'
 import { listBooks } from './books'
 import { getStats } from './stats'
 import { indexLibrary, backfillPageCounts } from './scanner'
@@ -128,6 +129,27 @@ app.whenReady().then(async () => {
     return
   }
 
+  // 工作进程自检：在 utilityProcess 里算一本 PDF 的页数 + 渲染封面
+  if (process.env.LV_WORKERTEST) {
+    const out = process.env.LV_SMOKE_OUT
+    try {
+      const pdf = listBooks().find((b) => b.format === 'pdf' && !b.missing)
+      if (!pdf) throw new Error('库中没有 PDF')
+      const t0 = Date.now()
+      const pages = await workerPageCount(pdf.path)
+      const ok = await workerRenderCover(pdf.path, join(getDataDir(), 'covers', 'worktest.png'))
+      const report = `WORKER ok | pages ${pages} | cover ${ok} | ${Date.now() - t0}ms`
+      if (out) writeFileSync(out, report + '\n')
+      console.log(report)
+    } catch (e) {
+      if (out) writeFileSync(out, 'WORKER ERROR: ' + (e as Error).message + '\n')
+    }
+    stopPdfWorker()
+    closeDb()
+    app.exit(0)
+    return
+  }
+
   closeDanglingSessions()
   if (process.env.LV_SEED_LIB && getSettings().libraryPaths.length === 0) {
     updateSettings({ libraryPaths: [process.env.LV_SEED_LIB] })
@@ -145,6 +167,7 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     void stopJobs()
+    stopPdfWorker()
     closeDb()
     app.quit()
   }

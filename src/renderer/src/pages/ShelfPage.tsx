@@ -24,18 +24,21 @@ const SORTS: { id: SortKey; label: string }[] = [
 
 const PAGE_SIZE = 60
 
+// 复用同一个 Collator（比每次 localeCompare 快得多，6279 本排序明显改善）
+const collator = new Intl.Collator('zh')
+
 function sortBooks(books: Book[], key: SortKey): Book[] {
   const arr = [...books]
   switch (key) {
     case 'title':
-      return arr.sort((a, b) => a.title.localeCompare(b.title, 'zh'))
+      return arr.sort((a, b) => collator.compare(a.title, b.title))
     case 'added':
       return arr.sort((a, b) => b.addedAt - a.addedAt)
     case 'progress':
       return arr.sort((a, b) => b.progress - a.progress)
     case 'recent':
     default:
-      return arr.sort((a, b) => (b.lastReadAt ?? 0) - (a.lastReadAt ?? 0) || a.title.localeCompare(b.title, 'zh'))
+      return arr.sort((a, b) => (b.lastReadAt ?? 0) - (a.lastReadAt ?? 0) || collator.compare(a.title, b.title))
   }
 }
 
