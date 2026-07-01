@@ -27,6 +27,7 @@ export function Sidebar({ page, onNavigate }: { page: Page; onNavigate: (p: Page
         {NAV.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
+            data-nav={id}
             onClick={() => onNavigate(id)}
             className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${
               page === id

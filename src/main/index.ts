@@ -44,16 +44,29 @@ function createWindow(): void {
     void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  // 开发期截图：渲染完成后截屏并退出
+  // 开发期截图：渲染完成后（可选先导航到某页）截屏并退出
   if (process.env.LV_SHOT) {
     mainWindow.webContents.once('did-finish-load', () => {
+      const delay = Number(process.env.LV_SHOT_DELAY) || 4500
+      const nav = process.env.LV_SHOT_NAV
       setTimeout(() => {
-        void mainWindow.webContents
-          .capturePage()
-          .then((img) => writeFileSync(process.env.LV_SHOT as string, img.toPNG()))
-          .catch((e) => console.error('[shot] 截图失败:', e))
-          .finally(() => app.exit(0))
-      }, Number(process.env.LV_SHOT_DELAY) || 4500)
+        void (async () => {
+          try {
+            if (nav) {
+              await mainWindow.webContents.executeJavaScript(
+                `document.querySelector('[data-nav="${nav}"]')?.click()`
+              )
+              await new Promise((r) => setTimeout(r, 900))
+            }
+            const img = await mainWindow.webContents.capturePage()
+            writeFileSync(process.env.LV_SHOT as string, img.toPNG())
+          } catch (e) {
+            console.error('[shot] 截图失败:', e)
+          } finally {
+            app.exit(0)
+          }
+        })()
+      }, delay)
     })
   }
 }
@@ -148,6 +161,18 @@ app.whenReady().then(async () => {
     closeDb()
     app.exit(0)
     return
+  }
+
+  // 诊断：事件循环延迟探针（LV_DIAG=1 时打印主线程被阻塞的时刻与时长）
+  if (process.env.LV_DIAG) {
+    let last = Date.now()
+    setInterval(() => {
+      const now = Date.now()
+      const lag = now - last - 200
+      last = now
+      if (lag > 80) console.log(`[diag] loop lag ${lag}ms @ ${new Date().toISOString().slice(11, 23)}`)
+    }, 200)
+    console.log('[diag] normal startup begin @', new Date().toISOString().slice(11, 23))
   }
 
   closeDanglingSessions()

@@ -3,12 +3,11 @@ import type { Dirent } from 'node:fs'
 import { join, extname, basename } from 'node:path'
 import { getSettings } from './settings'
 import {
-  getBookByPath,
+  getScanIndex,
   upsertScannedBook,
   markMissingExcept,
   listPdfsWithoutPageCount,
-  setPageCount,
-  type ScannedBook
+  setPageCount
 } from './books'
 import { workerPageCount } from './pdf-pool'
 import { broadcast } from './events'
@@ -71,37 +70,40 @@ export async function indexLibrary(
   const total = files.length
   let processed = 0
 
+  // 一次性读入现有索引，扫描时只做内存比对，避免逐文件同步查库（6279 次 → 1 次）
+  const index = getScanIndex()
+
   for (const file of files) {
     try {
       const st = await stat(file)
       const mtime = Math.round(st.mtimeMs)
       seen.push(file)
 
-      const existing = getBookByPath(file)
-      if (existing && !existing.missing && existing.fileSize === st.size && existing.fileMtime === mtime) {
-        processed++
-        continue
+      const existing = index.get(file)
+      const unchanged =
+        !!existing && existing.missing === 0 && existing.fileSize === st.size && existing.fileMtime === mtime
+      if (!unchanged) {
+        const format = EXT_FORMAT[extname(file).toLowerCase()] ?? 'other'
+        const res = upsertScannedBook({
+          path: file,
+          title: titleFromFilename(file),
+          author: null,
+          format,
+          pageCount: null, // 页数交给后台补算
+          fileSize: st.size,
+          fileMtime: mtime
+        })
+        if (res === 'added') added++
+        else if (res === 'updated') updated++
       }
-
-      const format = EXT_FORMAT[extname(file).toLowerCase()] ?? 'other'
-      const book: ScannedBook = {
-        path: file,
-        title: titleFromFilename(file),
-        author: null,
-        format,
-        pageCount: null, // 页数交给后台补算（新增/变化的文件都需重算）
-        fileSize: st.size,
-        fileMtime: mtime
-      }
-      const res = upsertScannedBook(book)
-      if (res === 'added') added++
-      else if (res === 'updated') updated++
     } catch (e) {
       errors.push({ path: file, message: (e as Error).message })
     }
     processed++
-    if (onProgress && (processed % 25 === 0 || processed === total)) {
-      onProgress({ phase: 'indexing', processed, total, currentPath: file })
+    // 每处理一批就让出事件循环，避免长时间占用主线程导致 UI 卡顿
+    if (processed % 200 === 0 || processed === total) {
+      onProgress?.({ phase: 'indexing', processed, total, currentPath: file })
+      await new Promise((resolve) => setImmediate(resolve))
     }
   }
 
@@ -158,10 +160,16 @@ export async function runScan(): Promise<ScanResult> {
   }
   scanning = true
   try {
+    const t0 = Date.now()
     const result = await indexLibrary(getSettings().libraryPaths, (p) => broadcast('scan:progress', p))
+    if (process.env.LV_DIAG)
+      console.log(`[diag] indexLibrary ${Date.now() - t0}ms +${result.added}/~${result.updated}/-${result.removed}`)
     broadcast('books:changed')
+    if (process.env.LV_DIAG) console.log('[diag] backfill start')
     // 后台补算页数（不阻塞本次返回）
-    void backfillPageCounts((p) => broadcast('scan:progress', p))
+    void backfillPageCounts((p) => broadcast('scan:progress', p)).then(() => {
+      if (process.env.LV_DIAG) console.log(`[diag] backfill done ${Date.now() - t0}ms`)
+    })
     return result
   } finally {
     scanning = false

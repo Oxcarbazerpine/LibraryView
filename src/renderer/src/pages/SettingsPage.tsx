@@ -156,10 +156,11 @@ export function SettingsPage() {
               className="h-9 rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-slate-300 focus:border-violet-500/50 focus:outline-none"
             >
               <option value={0} className="bg-[#14141d]">关闭</option>
-              <option value={15} className="bg-[#14141d]">每 15 分钟</option>
-              <option value={30} className="bg-[#14141d]">每 30 分钟</option>
-              <option value={60} className="bg-[#14141d]">每小时</option>
-              <option value={180} className="bg-[#14141d]">每 3 小时</option>
+              <option value={1440} className="bg-[#14141d]">每天</option>
+              <option value={4320} className="bg-[#14141d]">每 3 天</option>
+              <option value={10080} className="bg-[#14141d]">每周</option>
+              <option value={20160} className="bg-[#14141d]">每 2 周</option>
+              <option value={43200} className="bg-[#14141d]">每月</option>
             </select>
           </div>
         </Section>
@@ -281,10 +282,12 @@ function Toggle({
       </div>
       <button
         onClick={() => onChange(!checked)}
-        className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${checked ? 'bg-violet-500' : 'bg-white/15'}`}
+        role="switch"
+        aria-checked={checked}
+        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${checked ? 'bg-violet-500' : 'bg-white/15'}`}
       >
         <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${checked ? 'translate-x-[22px]' : 'translate-x-0.5'}`}
+          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`}
         />
       </button>
     </div>

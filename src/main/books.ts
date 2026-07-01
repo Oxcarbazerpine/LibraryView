@@ -200,6 +200,24 @@ export function setStatus(id: number, status: BookStatus): Book | null {
   return getBook(id)
 }
 
+export interface ScanIndexEntry {
+  fileSize: number
+  fileMtime: number
+  missing: number
+}
+
+/** 一次性取出全部书籍的扫描比对字段（path → 大小/修改时间/缺失），避免扫描时逐文件查库。 */
+export function getScanIndex(): Map<string, ScanIndexEntry> {
+  const rows = getDb()
+    .prepare('SELECT path, file_size, file_mtime, missing FROM books')
+    .all() as { path: string; file_size: number; file_mtime: number; missing: number }[]
+  const m = new Map<string, ScanIndexEntry>()
+  for (const r of rows) {
+    m.set(r.path, { fileSize: r.file_size, fileMtime: r.file_mtime, missing: r.missing })
+  }
+  return m
+}
+
 /** 后台补算页数：待处理的 PDF（页数仍为空、文件存在）。 */
 export function listPdfsWithoutPageCount(): { id: number; path: string }[] {
   return getDb()
