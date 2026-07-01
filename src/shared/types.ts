@@ -143,6 +143,9 @@ export interface LibraryViewApi {
   ensureCover: (id: number) => Promise<string | null>
   clearCoverCache: () => Promise<void>
 
+  // 在系统文件管理器中定位该文件
+  revealInFolder: (path: string) => Promise<void>
+
   // 数据目录（数据库 + 封面所在的根目录；更改后会迁移旧数据并重启生效）
   getDataDir: () => Promise<string>
   setDataDir: (dir: string) => Promise<{ changed: boolean; error?: string }>

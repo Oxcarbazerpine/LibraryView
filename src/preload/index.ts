@@ -27,6 +27,7 @@ const api: LibraryViewApi = {
 
   ensureCover: (id) => ipcRenderer.invoke('cover:ensure', id),
   clearCoverCache: () => ipcRenderer.invoke('cover:clearCache'),
+  revealInFolder: (path) => ipcRenderer.invoke('shell:reveal', path),
 
   getDataDir: () => ipcRenderer.invoke('data:getDir'),
   setDataDir: (dir) => ipcRenderer.invoke('data:setDir', dir),

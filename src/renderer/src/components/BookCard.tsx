@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Play, Check, MoreVertical } from 'lucide-react'
+import { Play, Check, MoreVertical, FolderOpen } from 'lucide-react'
 import type { Book } from '@shared/types'
 import { useLibrary } from '@/store'
 import { Waveform } from './Waveform'
@@ -120,15 +120,15 @@ export function BookCard({ book }: { book: Book }) {
               className={`h-full w-full bg-gradient-to-t ${
                 finished
                   ? 'from-emerald-400/45 to-emerald-400/10'
-                  : 'from-violet-500/45 to-violet-500/10'
+                  : 'from-blue-500/45 to-blue-500/10'
               }`}
             />
             <div
-              className={`absolute inset-x-0 top-0 h-[2px] ${finished ? 'bg-emerald-300/90' : 'bg-violet-300/90'}`}
+              className={`absolute inset-x-0 top-0 h-[2px] ${finished ? 'bg-emerald-300/90' : 'bg-blue-300/90'}`}
               style={{
                 boxShadow: finished
                   ? '0 0 8px 0 rgba(110,231,183,0.55)'
-                  : '0 0 8px 0 rgba(167,139,250,0.55)'
+                  : '0 0 8px 0 rgba(96,165,250,0.55)'
               }}
             />
           </div>
@@ -170,7 +170,7 @@ export function BookCard({ book }: { book: Book }) {
         <>
           {/* 点击别处关闭 */}
           <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(false)} />
-          <div className="absolute right-2 top-10 z-30 min-w-[128px] rounded-lg border border-white/10 bg-[#1a1a24] p-1 shadow-xl">
+          <div className="absolute right-2 top-10 z-30 min-w-[180px] rounded-lg border border-white/10 bg-[#1a1a24] p-1 shadow-xl">
             <div className="px-2 py-1 text-[11px] text-slate-500">标记为</div>
             {STATUS_OPTIONS.map((o) => (
               <button
@@ -187,6 +187,17 @@ export function BookCard({ book }: { book: Book }) {
                 {book.status === o.id && <Check className="h-3.5 w-3.5" />}
               </button>
             ))}
+            <div className="my-1 border-t border-white/10" />
+            <button
+              onClick={() => {
+                void window.api.revealInFolder(book.path)
+                setMenuOpen(false)
+              }}
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm text-slate-200 transition-colors hover:bg-white/10"
+            >
+              <FolderOpen className="h-3.5 w-3.5 shrink-0" />
+              在文件浏览器中打开
+            </button>
           </div>
         </>
       )}

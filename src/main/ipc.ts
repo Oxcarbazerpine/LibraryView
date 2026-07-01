@@ -1,4 +1,4 @@
-import { ipcMain, dialog, app } from 'electron'
+import { ipcMain, dialog, app, shell } from 'electron'
 import { resolve } from 'node:path'
 import { getSettings, updateSettings, getDataDir } from './settings'
 import * as books from './books'
@@ -66,6 +66,10 @@ export function registerIpc(): void {
   })
 
   ipcMain.handle('stats:get', (_e, rangeDays?: number) => getStats(rangeDays ?? 30))
+
+  ipcMain.handle('shell:reveal', (_e, p: string) => {
+    if (p) shell.showItemInFolder(p)
+  })
 
   ipcMain.handle('cover:ensure', (_e, id: number) => ensureCover(id))
   ipcMain.handle('cover:clearCache', async () => {
