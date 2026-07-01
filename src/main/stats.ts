@@ -1,5 +1,7 @@
 import { getDb } from './db'
-import type { StatsSummary, DailyReadingStat } from '../shared/types'
+import type { StatsSummary, DailyReadingStat, TopBook } from '../shared/types'
+
+const CALENDAR_DAYS = 371 // 53 周，用于热力图
 
 function fmtLocal(d: Date): string {
   const y = d.getFullYear()
@@ -74,6 +76,26 @@ export function getStats(rangeDays = 30): StatsSummary {
     daily.push({ day: key, seconds: sums.get(key) ?? 0 })
   }
 
+  // 近约一年的每日序列（热力图用）
+  const calendar: DailyReadingStat[] = []
+  const calStart = new Date()
+  calStart.setHours(0, 0, 0, 0)
+  calStart.setDate(calStart.getDate() - (CALENDAR_DAYS - 1))
+  for (let i = 0; i < CALENDAR_DAYS; i++) {
+    const d = new Date(calStart)
+    d.setDate(calStart.getDate() + i)
+    const key = fmtLocal(d)
+    calendar.push({ day: key, seconds: sums.get(key) ?? 0 })
+  }
+
+  const topBooks = db
+    .prepare(
+      `SELECT id, title, total_reading_seconds AS seconds
+       FROM books WHERE total_reading_seconds > 0
+       ORDER BY total_reading_seconds DESC LIMIT 8`
+    )
+    .all() as TopBook[]
+
   const totalSeconds = [...sums.values()].reduce((a, b) => a + b, 0)
   const todaySeconds = sums.get(fmtLocal(new Date())) ?? 0
 
@@ -96,6 +118,8 @@ export function getStats(rangeDays = 30): StatsSummary {
     booksFinished: counts.finished ?? 0,
     booksTotal: counts.total ?? 0,
     todaySeconds,
-    daily
+    daily,
+    calendar,
+    topBooks
   }
 }

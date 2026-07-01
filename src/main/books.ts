@@ -109,7 +109,7 @@ export function upsertScannedBook(b: ScannedBook): 'added' | 'updated' | 'unchan
     `UPDATE books SET
        title = @title, author = @author, format = @format, page_count = @pageCount,
        file_size = @fileSize, file_mtime = @fileMtime, progress = @progress,
-       missing = 0, updated_at = @now
+       missing = 0, meta_extracted = 0, updated_at = @now
      WHERE id = @id`
   ).run({
     title: b.title,
@@ -162,14 +162,21 @@ export function markMissingExcept(seenPaths: string[]): number {
   return tx(seenPaths)
 }
 
-/** 进度同步（来自 SumatraPDF）：按路径更新当前页/进度/上次阅读时间。 */
-export function applyProgressByPath(path: string, currentPage: number, touchLastRead: boolean): boolean {
+/**
+ * 进度同步（来自 SumatraPDF）：按路径更新当前页/进度/上次阅读时间。
+ * 返回发生变化的书籍 id（用于驱动阅读会话活动检测），无变化/未匹配返回 null。
+ */
+export function applyProgressByPath(
+  path: string,
+  currentPage: number,
+  touchLastRead: boolean
+): number | null {
   const db = getDb()
   const r = db.prepare('SELECT * FROM books WHERE path = ? COLLATE NOCASE').get(path) as
     | BookRow
     | undefined
-  if (!r) return false
-  if (currentPage === r.current_page) return false
+  if (!r) return null
+  if (currentPage === r.current_page) return null
   const progress = computeProgress(currentPage, r.page_count)
   const now = Date.now()
   // 「读完」具有粘性：一旦标记读完（手动或自动），自动同步不再降级为在读；要改回请手动设置
@@ -184,7 +191,7 @@ export function applyProgressByPath(path: string, currentPage: number, touchLast
        last_read_at = COALESCE(?, last_read_at), updated_at = ?
      WHERE id = ?`
   ).run(currentPage, progress, status, touchLastRead ? now : null, now, r.id)
-  return true
+  return r.id
 }
 
 /** 手动设置进度（用户在书架上拖动/输入页码）。 */
@@ -235,6 +242,34 @@ export function clearAllCovers(): void {
   getDb()
     .prepare('UPDATE books SET cover_path = NULL, updated_at = ? WHERE cover_path IS NOT NULL')
     .run(Date.now())
+}
+
+/** 待抽取内嵌元数据的电子书（epub/mobi/azw3/cbz，尚未处理、文件存在）。 */
+export function listBooksNeedingMeta(): { id: number; path: string; format: BookFormat }[] {
+  return getDb()
+    .prepare(
+      `SELECT id, path, format FROM books
+       WHERE meta_extracted = 0 AND missing = 0
+         AND format IN ('epub','mobi','azw3','cbz')`
+    )
+    .all() as { id: number; path: string; format: BookFormat }[]
+}
+
+/**
+ * 写入抽取到的内嵌元数据（书名/作者）。无论是否抽到都置 meta_extracted=1 以免重复解析。
+ * 书名仅在抽到非空值时覆盖（文件名派生的标题可能是乱码，内嵌元数据更可信）。
+ */
+export function applyEbookMeta(id: number, title?: string, author?: string): void {
+  const db = getDb()
+  const t = title?.trim()
+  const a = author?.trim()
+  if (t) {
+    db.prepare('UPDATE books SET title = ?, updated_at = ? WHERE id = ?').run(t, Date.now(), id)
+  }
+  if (a) {
+    db.prepare('UPDATE books SET author = ?, updated_at = ? WHERE id = ?').run(a, Date.now(), id)
+  }
+  db.prepare('UPDATE books SET meta_extracted = 1 WHERE id = ?').run(id)
 }
 
 /** 写入算得的页数并按当前页重算进度（0 表示尝试过但失败/未知）。 */

@@ -62,9 +62,25 @@ export function workerPageCount(path: string): Promise<number | null> {
   return request({ type: 'pageCount', path }, false) as Promise<number | null>
 }
 
-/** 渲染封面到 out（用户可见、高优先级，插队到页数任务前面）。 */
+/** 渲染 PDF 封面到 out（用户可见、高优先级，插队到页数任务前面）。 */
 export function workerRenderCover(path: string, out: string): Promise<boolean> {
   return request({ type: 'cover', path, out }, true) as Promise<boolean>
+}
+
+/** 抽取 epub/mobi/azw3 内嵌元数据（后台、低优先级）。 */
+export function workerEbookMeta(
+  path: string,
+  format: string
+): Promise<{ title?: string; author?: string }> {
+  return request({ type: 'ebookMeta', path, format }, false) as Promise<{
+    title?: string
+    author?: string
+  }>
+}
+
+/** 抽取 epub/mobi/azw3/cbz 内嵌封面到 out（用户可见、高优先级）。 */
+export function workerEbookCover(path: string, format: string, out: string): Promise<boolean> {
+  return request({ type: 'ebookCover', path, out, format }, true) as Promise<boolean>
 }
 
 export function stopPdfWorker(): void {

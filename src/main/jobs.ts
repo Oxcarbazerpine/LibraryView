@@ -1,8 +1,10 @@
 import { getSettings } from './settings'
 import { runScan } from './scanner'
 import { startSumatraWatch, stopSumatraWatch } from './sumatra'
+import { checkIdleSession } from './sessions'
 
 let intervalTimer: ReturnType<typeof setInterval> | null = null
+let idleTimer: ReturnType<typeof setInterval> | null = null
 
 function setupInterval(minutes: number): void {
   if (intervalTimer) {
@@ -27,6 +29,8 @@ function setupInterval(minutes: number): void {
 export async function startJobs(): Promise<void> {
   const s = getSettings()
   setupInterval(s.scanIntervalMinutes)
+  // 每 30 秒检查一次进行中的阅读会话是否空闲超时（基于翻页活动）
+  if (!idleTimer) idleTimer = setInterval(() => checkIdleSession(), 30 * 1000)
   await startSumatraWatch()
   if (s.scanOnStartup) void runScan()
 }
@@ -43,5 +47,9 @@ export async function stopJobs(): Promise<void> {
   if (intervalTimer) {
     clearInterval(intervalTimer)
     intervalTimer = null
+  }
+  if (idleTimer) {
+    clearInterval(idleTimer)
+    idleTimer = null
   }
 }

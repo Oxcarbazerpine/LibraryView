@@ -2,7 +2,10 @@ import { mkdir, access, readdir, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { getBook, setCover, clearAllCovers } from './books'
 import { getDataDir } from './settings'
-import { workerRenderCover } from './pdf-pool'
+import { workerRenderCover, workerEbookCover } from './pdf-pool'
+
+// 能抽取内嵌封面的电子书格式（PDF 走首页渲染，单独处理）
+const EBOOK_COVER_FORMATS = new Set(['epub', 'mobi', 'azw3', 'cbz'])
 
 /** 封面缓存目录：始终在数据目录下（<dataDir>/covers）。 */
 export function coversDirectory(): string {
@@ -36,10 +39,19 @@ export async function ensureCover(bookId: number): Promise<string | null> {
       if (book.coverPath !== out) setCover(bookId, out)
       return out
     }
-    if (book.format !== 'pdf' || book.missing) return null
+    if (book.missing) return null
 
-    await mkdir(dir, { recursive: true })
-    const ok = await workerRenderCover(book.path, out) // 在 utilityProcess 中渲染，不占主线程
+    let ok = false
+    if (book.format === 'pdf') {
+      await mkdir(dir, { recursive: true })
+      ok = await workerRenderCover(book.path, out) // 渲染首页；在 utilityProcess 中，不占主线程
+    } else if (EBOOK_COVER_FORMATS.has(book.format)) {
+      await mkdir(dir, { recursive: true })
+      ok = await workerEbookCover(book.path, book.format, out) // 抽取内嵌封面
+    } else {
+      return null // djvu / other 暂无封面
+    }
+
     if (ok) {
       setCover(bookId, out)
       return out

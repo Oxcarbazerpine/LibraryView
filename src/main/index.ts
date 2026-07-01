@@ -5,11 +5,17 @@ import { initDb, closeDb } from './db'
 import { closeDanglingSessions } from './sessions'
 import { registerIpc } from './ipc'
 import { startJobs, stopJobs } from './jobs'
-import { stopPdfWorker, workerPageCount, workerRenderCover } from './pdf-pool'
+import {
+  stopPdfWorker,
+  workerPageCount,
+  workerRenderCover,
+  workerEbookMeta,
+  workerEbookCover
+} from './pdf-pool'
 import { getSettings, updateSettings, getDataDir } from './settings'
 import { listBooks } from './books'
 import { getStats } from './stats'
-import { indexLibrary, backfillPageCounts } from './scanner'
+import { indexLibrary, backfillPageCounts, backfillMetadata } from './scanner'
 import { syncFromSumatra } from './sumatra'
 import { registerLvimgScheme, handleLvimg } from './protocol'
 
@@ -17,10 +23,10 @@ registerLvimgScheme()
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
-    width: 1320,
-    height: 860,
-    minWidth: 960,
-    minHeight: 640,
+    width: 1560,
+    height: 980,
+    minWidth: 1120,
+    minHeight: 720,
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#0b0b12',
@@ -161,6 +167,38 @@ app.whenReady().then(async () => {
       console.log(report)
     } catch (e) {
       if (out) writeFileSync(out, 'WORKER ERROR: ' + (e as Error).message + '\n')
+    }
+    stopPdfWorker()
+    closeDb()
+    app.exit(0)
+    return
+  }
+
+  // 电子书元数据/封面自检：对库中每种电子书格式各取一本，抽取书名/作者与内嵌封面
+  if (process.env.LV_EBOOK) {
+    const out = process.env.LV_SMOKE_OUT
+    try {
+      const all = listBooks()
+      const formats = ['epub', 'mobi', 'azw3', 'cbz'] as const
+      const lines: string[] = []
+      for (const fmt of formats) {
+        const b = all.find((x) => x.format === fmt && !x.missing)
+        if (!b) {
+          lines.push(`${fmt}: （库中无）`)
+          continue
+        }
+        const meta = await workerEbookMeta(b.path, b.format)
+        const coverOut = join(getDataDir(), 'covers', `ebooktest_${fmt}.png`)
+        const ok = await workerEbookCover(b.path, b.format, coverOut)
+        lines.push(
+          `${fmt}: cover=${ok} title=「${(meta.title ?? '').slice(0, 36)}」author=${meta.author ?? '-'}`
+        )
+      }
+      const report = 'EBOOK\n' + lines.join('\n')
+      if (out) writeFileSync(out, report + '\n')
+      console.log(report)
+    } catch (e) {
+      if (out) writeFileSync(out, 'EBOOK ERROR: ' + (e as Error).message + '\n')
     }
     stopPdfWorker()
     closeDb()

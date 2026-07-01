@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Play, Check, MoreVertical, FolderOpen } from 'lucide-react'
+import { Play, Check, MoreVertical, FolderOpen, Info } from 'lucide-react'
 import type { Book } from '@shared/types'
 import { useLibrary } from '@/store'
 import { Waveform } from './Waveform'
@@ -8,6 +8,9 @@ import { formatRelativeTime, progressPercent, gradientFromString, formatLabel } 
 function buildCoverUrl(id: number, v: number): string {
   return `lvimg://cover/${id}?v=${v}`
 }
+
+// 可生成封面的格式（PDF 渲染首页，其余抽取内嵌封面）
+const COVERABLE = new Set(['pdf', 'epub', 'mobi', 'azw3', 'cbz'])
 
 const STATUS_BADGE: Record<Book['status'], { label: string; cls: string }> = {
   unread: { label: '未读', cls: 'bg-slate-500/15 text-slate-300' },
@@ -22,7 +25,7 @@ const STATUS_OPTIONS: { id: Book['status']; label: string }[] = [
 ]
 
 export function BookCard({ book }: { book: Book }) {
-  const { active, startReading, stopReading, setStatus } = useLibrary()
+  const { active, startReading, stopReading, setStatus, openDetail } = useLibrary()
   const isReading = active?.bookId === book.id
   const [busy, setBusy] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -36,9 +39,9 @@ export function BookCard({ book }: { book: Book }) {
   const finished = book.status === 'finished'
   const badge = STATUS_BADGE[book.status]
 
-  // 进入视口时为 PDF 按需生成封面
+  // 进入视口时按需生成封面（PDF 渲染首页，epub/mobi/azw3/cbz 抽取内嵌封面）
   useEffect(() => {
-    if (cover || requested.current || book.format !== 'pdf' || book.missing) return
+    if (cover || requested.current || !COVERABLE.has(book.format) || book.missing) return
     const el = rootRef.current
     if (!el) return
     const io = new IntersectionObserver(
@@ -69,7 +72,7 @@ export function BookCard({ book }: { book: Book }) {
   }
 
   return (
-    <div className="group relative animate-fade-up" ref={rootRef}>
+    <div className="group relative" ref={rootRef}>
       <button
         onClick={onToggle}
         disabled={busy}
@@ -171,6 +174,17 @@ export function BookCard({ book }: { book: Book }) {
           {/* 点击别处关闭 */}
           <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(false)} />
           <div className="absolute right-2 top-10 z-30 min-w-[180px] rounded-lg border border-white/10 bg-[#1a1a24] p-1 shadow-xl">
+            <button
+              onClick={() => {
+                openDetail(book.id)
+                setMenuOpen(false)
+              }}
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm text-slate-200 transition-colors hover:bg-white/10"
+            >
+              <Info className="h-3.5 w-3.5 shrink-0" />
+              查看详情
+            </button>
+            <div className="my-1 border-t border-white/10" />
             <div className="px-2 py-1 text-[11px] text-slate-500">标记为</div>
             {STATUS_OPTIONS.map((o) => (
               <button

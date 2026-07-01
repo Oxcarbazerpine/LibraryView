@@ -6,16 +6,18 @@
 
 ## 功能
 
-- **书架墙**：网格展示书库，PDF 自动渲染首页作封面，显示阅读进度、上次阅读时间、状态；支持搜索 / 筛选（全部·在读·未读·读完）/ 排序，海量书籍下无限滚动。
-- **扫描索引**：递归扫描库目录，识别 PDF / EPUB / MOBI / AZW3 / DjVu / CBZ。两段式——先秒级入库（书架立即可浏览），再后台用 pdfjs 补算 PDF 总页数。基于文件大小+修改时间增量更新，支持实时监听与定时扫描。
-- **阅读会话**：点击书籍 → 用外部阅读器（推荐 SumatraPDF）打开并开始计时，卡片播放音乐波纹动画；再点一下手动结束，时长入库。
+- **书架墙**：网格展示书库，显示阅读进度（封面「注水」效果）、上次阅读时间、状态；支持搜索 / 筛选（全部·在读·未读·读完）/ 排序。**虚拟滚动**，上万本也流畅、内存平稳；首屏优先加载书籍、统计延后。
+- **封面与元数据**：PDF 渲染首页；EPUB / CBZ 解压取内嵌封面；MOBI / AZW3 解析 PDB+EXTH 抽取内嵌封面与书名/作者（文件名乱码的电子书据此纠正标题）。全部在独立工作进程完成，不阻塞界面。
+- **扫描索引**：递归扫描库目录，识别 PDF / EPUB / MOBI / AZW3 / DjVu / CBZ。多段式——先秒级入库（书架立即可浏览），再后台抽取电子书元数据、补算 PDF 总页数。基于文件大小+修改时间增量更新。
+- **阅读会话**：点击书籍 → 用外部阅读器打开并开始计时，卡片播放音乐波纹动画。基于 SumatraPDF 翻页活动**空闲自动结束**（默认 5 分钟无翻页），再次翻页**自动恢复**；也可随时手动结束。
 - **进度自动同步**：监听 SumatraPDF 的 `SumatraPDF-settings.txt`，解析 `FileStates` 的 `PageNo`，自动回写每本书的当前页与进度。
-- **统计面板**：每日阅读时长柱状图、累计时长、连续阅读天数、在读/读完数。
-- **设置**：库目录（多目录）、外部阅读器、SumatraPDF 设置文件、扫描间隔、封面缓存目录。
+- **书籍详情**：查看完整信息、阅读历史（每次时长/页码区间）、手动设置当前页。
+- **统计面板**：日/周/月阅读时长柱状图、近一年阅读热力图、阅读时长排行、累计时长、连续阅读天数、在读/读完数。
+- **设置**：库目录（多目录）、默认阅读器 + **按格式指定阅读器**（如 AZW3→Calibre）、空闲结束阈值、SumatraPDF 设置文件、扫描间隔、数据目录。
 
 ## 技术栈
 
-Electron 42 · electron-vite 5 · Vite 7 · React 19 · TypeScript · Tailwind CSS v4 · better-sqlite3 · pdfjs-dist + @napi-rs/canvas（主进程渲染封面）· chokidar。
+Electron 42 · electron-vite 5 · Vite 7 · React 19 · TypeScript · Tailwind CSS v4 · better-sqlite3 · pdfjs-dist + @napi-rs/canvas（工作进程渲染/解码封面）· fflate（解 EPUB/CBZ）· @tanstack/react-virtual（虚拟滚动）· chokidar。
 
 ## 开发
 
@@ -46,6 +48,14 @@ npm run package:dir  # 仅产出免安装目录 dist/win-unpacked/
 - 封面缓存：`<dataDir>\covers\<书id>.png`（经 `lvimg://cover/<id>` 协议提供给界面）
 
 `dataDir` 默认是 `%APPDATA%\libraryview`，可在「设置 → 数据目录」里更改——更改时会把旧数据库与封面迁移到新目录，然后重启生效。路径直接由设置决定，不做 `app.setPath` 重定向。Electron 框架自身的少量运行缓存仍按默认放在 `%APPDATA%\libraryview`（一次性缓存，非数据）。
+
+**升级不丢配置**：`build/installer.nsh` 在卸载/升级前把安装目录的 `config.json` 备份到临时目录，安装后再恢复，因此重装/升级不会清空设置。
+
+**数据库迁移**：`src/main/db.ts` 里基线 schema（`baseline()`）已冻结，任何后续结构变更都追加到 `MIGRATIONS` 数组（按 `PRAGMA user_version` 顺序执行 `ALTER` 等），全新库与既有库都会一致地演进到最新版本——不要再改基线。
+
+## 代码签名
+
+安装包目前**未签名**，Windows SmartScreen 首次运行会提示。若要签名：在 `package.json` 的 `build.win` 下加 `signtoolOptions`（证书文件/主题名或 EV 证书），electron-builder 会在打包时自动签署。无证书则保持现状即可（自用无碍）。
 
 ## 进度同步说明
 

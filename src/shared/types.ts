@@ -52,6 +52,8 @@ export interface ActiveSession {
   sessionId: number
   bookId: number
   startedAt: number
+  /** 是否有活动信号（来自 SumatraPDF 翻页）可用于空闲自动结束 */
+  tracked: boolean
 }
 
 export interface AppSettings {
@@ -59,12 +61,16 @@ export interface AppSettings {
   dataDir: string
   /** 书库根目录（支持多个） */
   libraryPaths: string[]
-  /** 外部阅读器可执行文件路径 */
+  /** 外部阅读器可执行文件路径（默认，所有格式回退到它） */
   readerPath: string | null
+  /** 按格式指定阅读器（覆盖默认）；例如 azw3 → Calibre */
+  readerByFormat: Partial<Record<BookFormat, string>>
   /** SumatraPDF 设置文件路径，用于自动同步进度 */
   sumatraSettingsPath: string | null
   /** 是否启用基于 SumatraPDF 的自动进度同步 */
   autoSyncProgress: boolean
+  /** 阅读会话空闲多久（分钟）无翻页则自动结束；再次翻页会自动恢复。0=不自动结束 */
+  idleTimeoutMinutes: number
   /** 定时扫描间隔（分钟，0=关闭定时扫描） */
   scanIntervalMinutes: number
   scanOnStartup: boolean
@@ -73,6 +79,12 @@ export interface AppSettings {
 export interface DailyReadingStat {
   /** 本地日期 YYYY-MM-DD */
   day: string
+  seconds: number
+}
+
+export interface TopBook {
+  id: number
+  title: string
   seconds: number
 }
 
@@ -87,8 +99,12 @@ export interface StatsSummary {
   booksTotal: number
   /** 今日阅读秒数 */
   todaySeconds: number
-  /** 按天的时长序列（已按日期升序填充，含 0 的空白天） */
+  /** 按天的时长序列（已按日期升序填充，含 0 的空白天）——受 rangeDays 限制 */
   daily: DailyReadingStat[]
+  /** 近约一年（371 天）的每日时长，用于热力图；含 0 空白天，按日期升序 */
+  calendar: DailyReadingStat[]
+  /** 阅读时长最高的若干本书 */
+  topBooks: TopBook[]
 }
 
 export interface ScanResult {
@@ -102,10 +118,16 @@ export interface ScanResult {
 
 /** 扫描进度事件（主进程 → 渲染层推送） */
 export interface ScanProgress {
-  phase: 'walking' | 'indexing' | 'pagecount' | 'covers' | 'done'
+  phase: 'walking' | 'indexing' | 'pagecount' | 'metadata' | 'covers' | 'done'
   processed: number
   total: number
   currentPath?: string
+}
+
+/** 轻量通知（主进程 → 渲染层，渲染层用 toast 呈现） */
+export interface Notify {
+  level: 'info' | 'success' | 'error'
+  message: string
 }
 
 export interface FileFilter {
@@ -135,11 +157,13 @@ export interface LibraryViewApi {
   getActiveSession: () => Promise<ActiveSession | null>
   startReading: (bookId: number) => Promise<ActiveSession>
   stopReading: (bookId: number) => Promise<ReadingSession | null>
+  /** 某书的阅读历史（按开始时间倒序） */
+  listSessions: (bookId: number) => Promise<ReadingSession[]>
 
   // 统计
   getStats: (rangeDays?: number) => Promise<StatsSummary>
 
-  // 封面（按需渲染 PDF 首页并缓存，返回封面文件路径或 null）
+  // 封面（按需渲染首页/内嵌封面并缓存，返回封面文件路径或 null）
   ensureCover: (id: number) => Promise<string | null>
   clearCoverCache: () => Promise<void>
 
@@ -150,9 +174,9 @@ export interface LibraryViewApi {
   getDataDir: () => Promise<string>
   setDataDir: (dir: string) => Promise<{ changed: boolean; error?: string }>
 
-
   // 事件订阅（返回取消订阅函数）
   onBooksChanged: (cb: () => void) => () => void
   onScanProgress: (cb: (p: ScanProgress) => void) => () => void
   onSessionChanged: (cb: (s: ActiveSession | null) => void) => () => void
+  onNotify: (cb: (n: Notify) => void) => () => void
 }

@@ -18,8 +18,10 @@
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.1",
+    "@tanstack/react-virtual": "^3.14.5",
     "better-sqlite3": "^12.11.1",
     "chokidar": "^5.0.0",
+    "fflate": "^0.8.3",
     "pdfjs-dist": "^6.1.200"
   },
   "devDependencies": {

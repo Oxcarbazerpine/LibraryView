@@ -22,6 +22,7 @@ const api: LibraryViewApi = {
   getActiveSession: () => ipcRenderer.invoke('session:active'),
   startReading: (bookId) => ipcRenderer.invoke('session:start', bookId),
   stopReading: (bookId) => ipcRenderer.invoke('session:stop', bookId),
+  listSessions: (bookId) => ipcRenderer.invoke('session:list', bookId),
 
   getStats: (rangeDays) => ipcRenderer.invoke('stats:get', rangeDays),
 
@@ -34,7 +35,8 @@ const api: LibraryViewApi = {
 
   onBooksChanged: (cb) => subscribe('books:changed', () => cb()),
   onScanProgress: (cb) => subscribe('scan:progress', (p) => cb(p as never)),
-  onSessionChanged: (cb) => subscribe('session:changed', (s) => cb(s as never))
+  onSessionChanged: (cb) => subscribe('session:changed', (s) => cb(s as never)),
+  onNotify: (cb) => subscribe('notify', (n) => cb(n as never))
 }
 
 if (process.contextIsolated) {

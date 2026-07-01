@@ -1,6 +1,14 @@
 import { useState, useEffect, type ReactNode } from 'react'
 import { FolderOpen, Plus, X, RotateCw, FileText, FolderTree, Database } from 'lucide-react'
+import type { BookFormat } from '@shared/types'
 import { useLibrary } from '@/store'
+
+const FORMAT_READERS: { id: BookFormat; label: string }[] = [
+  { id: 'pdf', label: 'PDF' },
+  { id: 'epub', label: 'EPUB' },
+  { id: 'mobi', label: 'MOBI' },
+  { id: 'azw3', label: 'AZW3' }
+]
 
 export function SettingsPage() {
   const { settings, saveSettings, rescan, scan } = useLibrary()
@@ -37,6 +45,15 @@ export function SettingsPage() {
   const pickSumatra = async (): Promise<void> => {
     const f = await window.api.pickFile([{ name: '设置文件', extensions: ['txt'] }])
     if (f) await saveSettings({ sumatraSettingsPath: f })
+  }
+  const pickFormatReader = async (fmt: BookFormat): Promise<void> => {
+    const f = await window.api.pickFile([{ name: '可执行文件', extensions: ['exe'] }])
+    if (f) await saveSettings({ readerByFormat: { ...(s.readerByFormat ?? {}), [fmt]: f } })
+  }
+  const clearFormatReader = (fmt: BookFormat): void => {
+    const next = { ...(s.readerByFormat ?? {}) }
+    delete next[fmt]
+    void saveSettings({ readerByFormat: next })
   }
   const changeDataDir = async (): Promise<void> => {
     const dir = await window.api.pickFolder()
@@ -135,6 +152,45 @@ export function SettingsPage() {
             checked={s.autoSyncProgress}
             onChange={(v) => void saveSettings({ autoSyncProgress: v })}
           />
+          <div className="flex items-center justify-between border-t border-white/5 py-2 pt-3">
+            <div className="pr-4">
+              <div className="text-sm text-slate-200">空闲自动结束计时</div>
+              <div className="text-xs text-slate-500">
+                阅读中若这段时间内没有翻页则自动结束计时；再次翻页会自动继续。仅对能同步进度的书生效。
+              </div>
+            </div>
+            <select
+              value={s.idleTimeoutMinutes}
+              onChange={(e) => void saveSettings({ idleTimeoutMinutes: Number(e.target.value) })}
+              className="h-9 shrink-0 rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-slate-300 focus:border-violet-500/50 focus:outline-none"
+            >
+              <option value={0} className="bg-[#14141d]">关闭</option>
+              <option value={3} className="bg-[#14141d]">3 分钟</option>
+              <option value={5} className="bg-[#14141d]">5 分钟</option>
+              <option value={10} className="bg-[#14141d]">10 分钟</option>
+              <option value={15} className="bg-[#14141d]">15 分钟</option>
+              <option value={30} className="bg-[#14141d]">30 分钟</option>
+            </select>
+          </div>
+
+          <div className="border-t border-white/5 pt-3">
+            <div className="text-sm text-slate-200">按格式指定阅读器</div>
+            <p className="mb-1 mt-0.5 text-xs leading-relaxed text-slate-500">
+              未指定的格式使用上面的默认阅读器。SumatraPDF 不支持 AZW3，建议为其指定 Calibre 的
+              ebook-viewer 等。
+            </p>
+            {FORMAT_READERS.map((f) => (
+              <FilePathField
+                key={f.id}
+                label={f.label}
+                hint=""
+                value={s.readerByFormat?.[f.id] ?? null}
+                placeholder="使用默认阅读器"
+                onPick={() => void pickFormatReader(f.id)}
+                onClear={() => clearFormatReader(f.id)}
+              />
+            ))}
+          </div>
         </Section>
 
         {/* 扫描 */}

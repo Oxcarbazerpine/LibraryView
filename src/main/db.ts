@@ -30,7 +30,12 @@ export function closeDb(): void {
   }
 }
 
-function migrate(d: Database.Database): void {
+/**
+ * 基线 schema（v0）——已冻结，请勿再改。
+ * 任何后续变更都通过下面的 MIGRATIONS 增量步骤进行（ALTER/新表/新索引），
+ * 这样已存在的用户库和全新库都能一致地演进到最新版本。
+ */
+function baseline(d: Database.Database): void {
   d.exec(`
     CREATE TABLE IF NOT EXISTS books (
       id                    INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,4 +78,29 @@ function migrate(d: Database.Database): void {
       value TEXT NOT NULL
     );
   `)
+}
+
+/**
+ * 增量迁移步骤。索引 i 表示「从版本 i 升到 i+1」要执行的操作。
+ * 每一步都在事务中执行并原子地推进 user_version。新增列一律用 ADD COLUMN。
+ */
+const MIGRATIONS: ((d: Database.Database) => void)[] = [
+  // v0 -> v1：记录 epub/mobi/azw3 等的内嵌元数据是否已抽取过，避免每次扫描重复解析。
+  (d) => {
+    d.exec('ALTER TABLE books ADD COLUMN meta_extracted INTEGER NOT NULL DEFAULT 0')
+  }
+]
+
+function migrate(d: Database.Database): void {
+  baseline(d)
+  let v = d.pragma('user_version', { simple: true }) as number
+  for (; v < MIGRATIONS.length; v++) {
+    const step = MIGRATIONS[v]
+    const tx = d.transaction(() => {
+      step(d)
+      d.pragma(`user_version = ${v + 1}`)
+    })
+    tx()
+    console.log(`[db] 迁移至 v${v + 1}`)
+  }
 }

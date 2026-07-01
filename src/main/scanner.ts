@@ -7,9 +7,11 @@ import {
   upsertScannedBook,
   markMissingExcept,
   listPdfsWithoutPageCount,
-  setPageCount
+  setPageCount,
+  listBooksNeedingMeta,
+  applyEbookMeta
 } from './books'
-import { workerPageCount } from './pdf-pool'
+import { workerPageCount, workerEbookMeta } from './pdf-pool'
 import { broadcast } from './events'
 import type { BookFormat, ScanResult, ScanProgress } from '../shared/types'
 
@@ -150,6 +152,40 @@ export async function backfillPageCounts(
   }
 }
 
+// ---------- 第二段之二：后台抽取 epub/mobi/azw3/cbz 内嵌元数据（书名/作者） ----------
+
+let metaFilling = false
+
+export async function backfillMetadata(
+  onProgress?: (p: ScanProgress) => void,
+  limit?: number
+): Promise<void> {
+  if (metaFilling) return
+  metaFilling = true
+  try {
+    let pending = listBooksNeedingMeta()
+    if (limit && limit > 0) pending = pending.slice(0, limit)
+    const total = pending.length
+    if (total === 0) return
+
+    let processed = 0
+    await Promise.all(
+      pending.map(async (item) => {
+        const meta = await workerEbookMeta(item.path, item.format)
+        applyEbookMeta(item.id, meta.title, meta.author)
+        processed++
+        if (onProgress && (processed % 30 === 0 || processed === total)) {
+          onProgress({ phase: 'metadata', processed, total, currentPath: item.path })
+        }
+        if (processed % 400 === 0) broadcast('books:changed')
+      })
+    )
+    broadcast('books:changed')
+  } finally {
+    metaFilling = false
+  }
+}
+
 // ---------- 编排：先入库，再后台补页数 ----------
 
 let scanning = false
@@ -166,10 +202,13 @@ export async function runScan(): Promise<ScanResult> {
       console.log(`[diag] indexLibrary ${Date.now() - t0}ms +${result.added}/~${result.updated}/-${result.removed}`)
     broadcast('books:changed')
     if (process.env.LV_DIAG) console.log('[diag] backfill start')
-    // 后台补算页数（不阻塞本次返回）
-    void backfillPageCounts((p) => broadcast('scan:progress', p)).then(() => {
-      if (process.env.LV_DIAG) console.log(`[diag] backfill done ${Date.now() - t0}ms`)
-    })
+    // 后台补充：先抽取电子书内嵌元数据（改善书名/作者/封面），再补算 PDF 页数。
+    // 均不阻塞本次返回。
+    void backfillMetadata((p) => broadcast('scan:progress', p))
+      .then(() => backfillPageCounts((p) => broadcast('scan:progress', p)))
+      .then(() => {
+        if (process.env.LV_DIAG) console.log(`[diag] backfill done ${Date.now() - t0}ms`)
+      })
     return result
   } finally {
     scanning = false

@@ -52,18 +52,10 @@ export function registerIpc(): void {
   })
 
   ipcMain.handle('session:active', () => sessions.getActiveSession())
-  ipcMain.handle('session:start', (_e, bookId: number) => {
-    const s = sessions.startReading(bookId)
-    broadcast('session:changed', s)
-    broadcast('books:changed')
-    return s
-  })
-  ipcMain.handle('session:stop', (_e, bookId: number) => {
-    const s = sessions.stopReading(bookId)
-    broadcast('session:changed', null)
-    broadcast('books:changed')
-    return s
-  })
+  // startReading / stopReading 内部已广播 session:changed 与 books:changed
+  ipcMain.handle('session:start', (_e, bookId: number) => sessions.startReading(bookId))
+  ipcMain.handle('session:stop', (_e, bookId: number) => sessions.stopReading(bookId))
+  ipcMain.handle('session:list', (_e, bookId: number) => sessions.listSessions(bookId))
 
   ipcMain.handle('stats:get', (_e, rangeDays?: number) => getStats(rangeDays ?? 30))
 

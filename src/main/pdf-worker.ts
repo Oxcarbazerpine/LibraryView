@@ -3,6 +3,8 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { readEbookMeta, readEbookCover } from './ebook'
+import type { BookFormat } from '../shared/types'
 
 let canvasP: Promise<typeof import('@napi-rs/canvas')> | null = null
 function getCanvas(): Promise<typeof import('@napi-rs/canvas')> {
@@ -148,11 +150,38 @@ async function renderCover(path: string, out: string): Promise<boolean> {
   return true
 }
 
+// 把原始封面图片字节解码 + 缩放后落盘为 PNG（epub/mobi/azw3/cbz 复用）。
+async function renderImageCover(bytes: Uint8Array, out: string): Promise<boolean> {
+  const canvasMod = await getCanvas()
+  const img = await canvasMod.loadImage(Buffer.from(bytes))
+  const targetW = 360
+  const scale = Math.min(1, targetW / (img.width || targetW))
+  const w = Math.max(1, Math.round((img.width || targetW) * scale))
+  const h = Math.max(1, Math.round((img.height || targetW) * scale))
+  const canvas = canvasMod.createCanvas(w, h)
+  const ctx = canvas.getContext('2d')
+  ctx.drawImage(img, 0, 0, w, h)
+  await mkdir(dirname(out), { recursive: true })
+  await writeFile(out, canvas.toBuffer('image/png'))
+  return true
+}
+
+async function ebookCover(path: string, format: BookFormat, out: string): Promise<boolean> {
+  const bytes = await readEbookCover(path, format)
+  if (!bytes || bytes.length === 0) return false
+  try {
+    return await renderImageCover(bytes, out)
+  } catch {
+    return false // 解码失败（少见的图片格式等）
+  }
+}
+
 interface Job {
   id: number
-  type: 'pageCount' | 'cover'
+  type: 'pageCount' | 'cover' | 'ebookMeta' | 'ebookCover'
   path: string
   out?: string
+  format?: BookFormat
 }
 
 interface ParentPortLike {
@@ -161,17 +190,31 @@ interface ParentPortLike {
 }
 const parentPort = (process as unknown as { parentPort: ParentPortLike }).parentPort
 
+async function dispatch(job: Job): Promise<unknown> {
+  switch (job.type) {
+    case 'pageCount':
+      return pageCount(job.path)
+    case 'cover':
+      return renderCover(job.path, job.out ?? '')
+    case 'ebookMeta':
+      return readEbookMeta(job.path, job.format ?? 'other')
+    case 'ebookCover':
+      return ebookCover(job.path, job.format ?? 'other', job.out ?? '')
+    default:
+      return null
+  }
+}
+
 parentPort.on('message', (e: { data: Job }) => {
   const job = e.data
   void (async () => {
     try {
-      const result =
-        job.type === 'pageCount' ? await pageCount(job.path) : await renderCover(job.path, job.out ?? '')
-      parentPort.postMessage({ id: job.id, result })
+      parentPort.postMessage({ id: job.id, result: await dispatch(job) })
     } catch (err) {
+      const fail = job.type === 'ebookMeta' ? {} : job.type === 'pageCount' ? null : false
       parentPort.postMessage({
         id: job.id,
-        result: job.type === 'pageCount' ? null : false,
+        result: fail,
         error: String((err as { stack?: string })?.stack ?? err)
       })
     }

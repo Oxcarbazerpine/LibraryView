@@ -31,8 +31,10 @@ function defaults(): AppSettings {
     dataDir: app.getPath('userData'),
     libraryPaths: [],
     readerPath: detectSumatraExe(),
+    readerByFormat: {},
     sumatraSettingsPath: detectSumatraSettings(),
     autoSyncProgress: true,
+    idleTimeoutMinutes: 5, // 阅读会话空闲 5 分钟无翻页则自动结束
     scanIntervalMinutes: 0, // 默认关闭定时扫描
     scanOnStartup: false // 默认关闭启动扫描；库已建好索引，靠手动/定时扫描更新即可
   }

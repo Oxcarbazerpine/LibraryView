@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import type { FSWatcher } from 'chokidar'
 import { getSettings } from './settings'
 import { applyProgressByPath } from './books'
+import { noteReadingActivity } from './sessions'
 import { broadcast } from './events'
 
 let watcher: FSWatcher | null = null
@@ -61,8 +62,13 @@ export function parseFileStates(content: string): Map<string, number> {
   return result
 }
 
-/** 读取一次 SumatraPDF 设置并把进度回写到匹配的书籍。返回更新的本数。 */
-export async function syncFromSumatra(): Promise<number> {
+/**
+ * 读取一次 SumatraPDF 设置并把进度回写到匹配的书籍。返回更新的本数。
+ * isLive=true 表示这是应用运行期间由文件变化触发的实时同步（用户正在翻页），
+ * 此时把翻页作为活动信号驱动阅读会话（自动开始/保活/恢复）；
+ * 启动/手动/定时的批量同步不当作实时活动，避免为历史进度凭空开会话。
+ */
+export async function syncFromSumatra(isLive = false): Promise<number> {
   const { sumatraSettingsPath, autoSyncProgress } = getSettings()
   if (!autoSyncProgress || !sumatraSettingsPath) return 0
   let content: string
@@ -74,7 +80,12 @@ export async function syncFromSumatra(): Promise<number> {
   const states = parseFileStates(content)
   let updated = 0
   for (const [path, page] of states) {
-    if (page > 0 && applyProgressByPath(path, page, true)) updated++
+    if (page <= 0) continue
+    const id = applyProgressByPath(path, page, true)
+    if (id !== null) {
+      updated++
+      if (isLive) noteReadingActivity(id)
+    }
   }
   if (updated > 0) broadcast('books:changed')
   return updated
@@ -92,7 +103,7 @@ export async function startSumatraWatch(): Promise<void> {
     watcher = watch(sumatraSettingsPath, { ignoreInitial: true })
     watcher.on('change', () => {
       if (debounce) clearTimeout(debounce)
-      debounce = setTimeout(() => void syncFromSumatra(), 800)
+      debounce = setTimeout(() => void syncFromSumatra(true), 800)
     })
     watcher.on('error', (e: unknown) => console.error('[sumatra] 监听错误:', e))
   } catch (e) {
