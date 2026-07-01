@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Play, Check } from 'lucide-react'
+import { Play, Check, MoreVertical } from 'lucide-react'
 import type { Book } from '@shared/types'
 import { useLibrary } from '@/store'
 import { Waveform } from './Waveform'
-import { ProgressBar } from './ProgressBar'
 import { formatRelativeTime, progressPercent, gradientFromString, formatLabel } from '@/lib/format'
 
 function buildCoverUrl(id: number, v: number): string {
@@ -26,7 +25,7 @@ export function BookCard({ book }: { book: Book }) {
   const { active, startReading, stopReading, setStatus } = useLibrary()
   const isReading = active?.bookId === book.id
   const [busy, setBusy] = useState(false)
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [cover, setCover] = useState<string | null>(
     book.coverPath ? buildCoverUrl(book.id, book.updatedAt) : null
   )
@@ -34,6 +33,7 @@ export function BookCard({ book }: { book: Book }) {
   const requested = useRef(false)
   const [g1, g2] = gradientFromString(book.title)
   const pct = progressPercent(book.progress)
+  const finished = book.status === 'finished'
   const badge = STATUS_BADGE[book.status]
 
   // 进入视口时为 PDF 按需生成封面
@@ -69,14 +69,7 @@ export function BookCard({ book }: { book: Book }) {
   }
 
   return (
-    <div
-      className="group animate-fade-up"
-      ref={rootRef}
-      onContextMenu={(e) => {
-        e.preventDefault()
-        setMenu({ x: e.clientX, y: e.clientY })
-      }}
-    >
+    <div className="group relative animate-fade-up" ref={rootRef}>
       <button
         onClick={onToggle}
         disabled={busy}
@@ -117,9 +110,27 @@ export function BookCard({ book }: { book: Book }) {
           </div>
         )}
 
+        {/* 进度「注水」：水位 = 进度，从底部向上填充；半透明，水面有高亮线 */}
         {pct > 0 && (
-          <div className="absolute inset-x-0 bottom-0">
-            <ProgressBar value={book.progress} finished={book.status === 'finished'} className="rounded-none" />
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-0 overflow-hidden transition-[height] duration-500 ease-out"
+            style={{ height: `${pct}%` }}
+          >
+            <div
+              className={`h-full w-full bg-gradient-to-t ${
+                finished
+                  ? 'from-emerald-400/45 to-emerald-400/10'
+                  : 'from-violet-500/45 to-violet-500/10'
+              }`}
+            />
+            <div
+              className={`absolute inset-x-0 top-0 h-[2px] ${finished ? 'bg-emerald-300/90' : 'bg-violet-300/90'}`}
+              style={{
+                boxShadow: finished
+                  ? '0 0 8px 0 rgba(110,231,183,0.55)'
+                  : '0 0 8px 0 rgba(167,139,250,0.55)'
+              }}
+            />
           </div>
         )}
 
@@ -140,6 +151,45 @@ export function BookCard({ book }: { book: Book }) {
           )}
         </div>
       </button>
+
+      {/* 右上角三点菜单：hover 或菜单打开时显示 */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation()
+          setMenuOpen((v) => !v)
+        }}
+        title="更多"
+        className={`absolute right-2 top-2 z-30 flex h-7 w-7 items-center justify-center rounded-lg bg-black/50 text-white/90 ring-1 ring-white/15 backdrop-blur-sm transition-opacity hover:bg-black/70 ${
+          menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+        }`}
+      >
+        <MoreVertical className="h-4 w-4" />
+      </button>
+
+      {menuOpen && (
+        <>
+          {/* 点击别处关闭 */}
+          <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(false)} />
+          <div className="absolute right-2 top-10 z-30 min-w-[128px] rounded-lg border border-white/10 bg-[#1a1a24] p-1 shadow-xl">
+            <div className="px-2 py-1 text-[11px] text-slate-500">标记为</div>
+            {STATUS_OPTIONS.map((o) => (
+              <button
+                key={o.id}
+                onClick={() => {
+                  void setStatus(book.id, o.id)
+                  setMenuOpen(false)
+                }}
+                className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm transition-colors hover:bg-white/10 ${
+                  book.status === o.id ? 'text-violet-300' : 'text-slate-200'
+                }`}
+              >
+                {o.label}
+                {book.status === o.id && <Check className="h-3.5 w-3.5" />}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       <div className="mt-2 px-0.5">
         <h3
@@ -163,43 +213,6 @@ export function BookCard({ book }: { book: Book }) {
           <span className="shrink-0">{formatRelativeTime(book.lastReadAt)}</span>
         </div>
       </div>
-
-      {menu && (
-        <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setMenu(null)}
-            onContextMenu={(e) => {
-              e.preventDefault()
-              setMenu(null)
-            }}
-          />
-          <div
-            className="fixed z-50 min-w-[136px] rounded-lg border border-white/10 bg-[#1a1a24] p-1 shadow-xl"
-            style={{
-              top: Math.min(menu.y, window.innerHeight - 150),
-              left: Math.min(menu.x, window.innerWidth - 150)
-            }}
-          >
-            <div className="px-2 py-1 text-[11px] text-slate-500">标记为</div>
-            {STATUS_OPTIONS.map((o) => (
-              <button
-                key={o.id}
-                onClick={() => {
-                  void setStatus(book.id, o.id)
-                  setMenu(null)
-                }}
-                className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm transition-colors hover:bg-white/10 ${
-                  book.status === o.id ? 'text-violet-300' : 'text-slate-200'
-                }`}
-              >
-                {o.label}
-                {book.status === o.id && <Check className="h-3.5 w-3.5" />}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
     </div>
   )
 }
