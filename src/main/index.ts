@@ -58,6 +58,11 @@ function createWindow(): void {
               )
               await new Promise((r) => setTimeout(r, 900))
             }
+            const js = process.env.LV_SHOT_JS
+            if (js) {
+              await mainWindow.webContents.executeJavaScript(js)
+              await new Promise((r) => setTimeout(r, 500))
+            }
             const img = await mainWindow.webContents.capturePage()
             writeFileSync(process.env.LV_SHOT as string, img.toPNG())
           } catch (e) {

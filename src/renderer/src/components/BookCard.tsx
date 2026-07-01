@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Play } from 'lucide-react'
+import { Play, Check } from 'lucide-react'
 import type { Book } from '@shared/types'
 import { useLibrary } from '@/store'
 import { Waveform } from './Waveform'
@@ -16,10 +16,17 @@ const STATUS_BADGE: Record<Book['status'], { label: string; cls: string }> = {
   finished: { label: '读完', cls: 'bg-emerald-500/15 text-emerald-300' }
 }
 
+const STATUS_OPTIONS: { id: Book['status']; label: string }[] = [
+  { id: 'unread', label: '未读' },
+  { id: 'reading', label: '在读' },
+  { id: 'finished', label: '读完' }
+]
+
 export function BookCard({ book }: { book: Book }) {
-  const { active, startReading, stopReading } = useLibrary()
+  const { active, startReading, stopReading, setStatus } = useLibrary()
   const isReading = active?.bookId === book.id
   const [busy, setBusy] = useState(false)
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
   const [cover, setCover] = useState<string | null>(
     book.coverPath ? buildCoverUrl(book.id, book.updatedAt) : null
   )
@@ -62,7 +69,14 @@ export function BookCard({ book }: { book: Book }) {
   }
 
   return (
-    <div className="group animate-fade-up" ref={rootRef}>
+    <div
+      className="group animate-fade-up"
+      ref={rootRef}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        setMenu({ x: e.clientX, y: e.clientY })
+      }}
+    >
       <button
         onClick={onToggle}
         disabled={busy}
@@ -128,7 +142,10 @@ export function BookCard({ book }: { book: Book }) {
       </button>
 
       <div className="mt-2 px-0.5">
-        <h3 className="line-clamp-1 text-sm font-medium text-slate-100" title={book.title}>
+        <h3
+          className="line-clamp-2 min-h-[2.4rem] text-sm font-medium leading-snug text-slate-100"
+          title={book.title}
+        >
           {book.title}
         </h3>
         <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-slate-400">
@@ -146,6 +163,43 @@ export function BookCard({ book }: { book: Book }) {
           <span className="shrink-0">{formatRelativeTime(book.lastReadAt)}</span>
         </div>
       </div>
+
+      {menu && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setMenu(null)}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              setMenu(null)
+            }}
+          />
+          <div
+            className="fixed z-50 min-w-[136px] rounded-lg border border-white/10 bg-[#1a1a24] p-1 shadow-xl"
+            style={{
+              top: Math.min(menu.y, window.innerHeight - 150),
+              left: Math.min(menu.x, window.innerWidth - 150)
+            }}
+          >
+            <div className="px-2 py-1 text-[11px] text-slate-500">标记为</div>
+            {STATUS_OPTIONS.map((o) => (
+              <button
+                key={o.id}
+                onClick={() => {
+                  void setStatus(book.id, o.id)
+                  setMenu(null)
+                }}
+                className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm transition-colors hover:bg-white/10 ${
+                  book.status === o.id ? 'text-violet-300' : 'text-slate-200'
+                }`}
+              >
+                {o.label}
+                {book.status === o.id && <Check className="h-3.5 w-3.5" />}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }

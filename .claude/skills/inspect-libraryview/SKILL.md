@@ -36,7 +36,13 @@ npx electron .
 ```
 然后：`Read` 那个 `shot.png`。
 
-导航原理：钩子对 `document.querySelector('[data-nav="<id>"]').click()`（侧边栏按钮带 `data-nav`）。要截其它状态（如打开某弹窗），可在 `src/main/index.ts` 的 `LV_SHOT` 分支里临时加一段 `executeJavaScript`。
+导航原理：钩子对 `document.querySelector('[data-nav="<id>"]').click()`（侧边栏按钮带 `data-nav`）。
+
+要截**交互态**（右键菜单、hover、弹窗等），设 `LV_SHOT_JS='<一段JS>'`，它会在截图前于渲染层执行。例如触发第一张书卡的右键状态菜单：
+```powershell
+$env:LV_SHOT_JS = '(()=>{const el=document.querySelector(".group");const r=el.getBoundingClientRect();el.dispatchEvent(new MouseEvent("contextmenu",{bubbles:true,clientX:Math.round(r.left+40),clientY:Math.round(r.top+40)}))})()'
+```
+（PowerShell 用单引号包整段，JS 内部只用双引号，避免引号冲突。）
 
 ## 测性能 / 排查卡顿
 
