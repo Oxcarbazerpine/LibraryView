@@ -1,5 +1,5 @@
 import { useState, useEffect, type ReactNode } from 'react'
-import { FolderOpen, Plus, X, RotateCw, FileText, FolderTree, Database } from 'lucide-react'
+import { FolderOpen, Plus, X, RotateCw, FileText, FolderTree, Database, ChevronDown } from 'lucide-react'
 import type { BookFormat } from '@shared/types'
 import { useLibrary } from '@/store'
 
@@ -16,6 +16,7 @@ export function SettingsPage() {
   const [clearing, setClearing] = useState(false)
   const [dataDir, setDataDirState] = useState<string | null>(null)
   const [migrating, setMigrating] = useState(false)
+  const [fmtOpen, setFmtOpen] = useState(false)
 
   useEffect(() => {
     void window.api.getDataDir().then(setDataDirState)
@@ -174,22 +175,42 @@ export function SettingsPage() {
           </div>
 
           <div className="border-t border-white/5 pt-3">
-            <div className="text-sm text-slate-200">按格式指定阅读器</div>
-            <p className="mb-1 mt-0.5 text-xs leading-relaxed text-slate-500">
-              未指定的格式使用上面的默认阅读器。SumatraPDF 不支持 AZW3，建议为其指定 Calibre 的
-              ebook-viewer 等。
-            </p>
-            {FORMAT_READERS.map((f) => (
-              <FilePathField
-                key={f.id}
-                label={f.label}
-                hint=""
-                value={s.readerByFormat?.[f.id] ?? null}
-                placeholder="使用默认阅读器"
-                onPick={() => void pickFormatReader(f.id)}
-                onClear={() => clearFormatReader(f.id)}
+            <button
+              onClick={() => setFmtOpen((v) => !v)}
+              className="flex w-full items-center justify-between text-left"
+            >
+              <div>
+                <div className="text-sm text-slate-200">按格式指定阅读器</div>
+                <div className="text-xs text-slate-500">
+                  未指定的格式使用上面的默认阅读器
+                  {(() => {
+                    const set = Object.keys(s.readerByFormat ?? {}).length
+                    return set > 0 ? ` · 已设 ${set} 项` : ''
+                  })()}
+                </div>
+              </div>
+              <ChevronDown
+                className={`h-4 w-4 shrink-0 text-slate-500 transition-transform ${fmtOpen ? 'rotate-180' : ''}`}
               />
-            ))}
+            </button>
+            {fmtOpen && (
+              <div className="mt-2">
+                <p className="mb-1 text-xs leading-relaxed text-slate-500">
+                  SumatraPDF 不支持 AZW3，建议为其指定 Calibre 的 ebook-viewer 等。
+                </p>
+                {FORMAT_READERS.map((f) => (
+                  <FilePathField
+                    key={f.id}
+                    label={f.label}
+                    hint=""
+                    value={s.readerByFormat?.[f.id] ?? null}
+                    placeholder="使用默认阅读器"
+                    onPick={() => void pickFormatReader(f.id)}
+                    onClear={() => clearFormatReader(f.id)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </Section>
 

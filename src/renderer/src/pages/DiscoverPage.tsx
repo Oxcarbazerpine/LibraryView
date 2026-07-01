@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Sparkles, Shuffle, Compass } from 'lucide-react'
 import type { Book } from '@shared/types'
 import { useLibrary } from '@/store'
@@ -29,7 +29,24 @@ export function DiscoverPage({ onNavigate }: { onNavigate: (p: Page) => void }) 
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9) + 1)
 
   const avail = useMemo(() => books.filter((b) => !b.missing), [books])
-  const reading = useMemo(() => avail.filter((b) => b.status === 'reading').slice(0, 12), [avail])
+  const reading = useMemo(() => avail.filter((b) => b.status === 'reading'), [avail])
+
+  // 测量一行能放几本 →「继续阅读」只显示一行
+  const pageRef = useRef<HTMLDivElement>(null)
+  const [cols, setCols] = useState(6)
+  useLayoutEffect(() => {
+    const el = pageRef.current
+    if (!el) return
+    const measure = (): void => {
+      const w = el.clientWidth - 64 // 减去 px-8 左右内边距
+      setCols(Math.max(1, Math.floor((w + 16) / 166))) // 166 = 卡片最小宽 150 + 间距 16
+    }
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    measure()
+    return () => ro.disconnect()
+  }, [loading])
+  const readingRow = reading.slice(0, cols)
 
   // 当前书对象索引（每次渲染都新鲜 → 状态改动立即反映）
   const byId = useMemo(() => new Map(avail.map((b) => [b.id, b])), [avail])
@@ -50,7 +67,7 @@ export function DiscoverPage({ onNavigate }: { onNavigate: (p: Page) => void }) 
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-6xl px-8 py-8">
+      <div ref={pageRef} className="mx-auto max-w-6xl px-8 py-8">
         <header className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="flex items-center gap-2 text-xl font-semibold text-slate-100">
@@ -87,7 +104,7 @@ export function DiscoverPage({ onNavigate }: { onNavigate: (p: Page) => void }) 
                   </button>
                 }
               >
-                <Grid books={reading} />
+                <Grid books={readingRow} />
               </Section>
             )}
 
