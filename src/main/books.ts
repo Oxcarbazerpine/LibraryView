@@ -172,8 +172,13 @@ export function applyProgressByPath(path: string, currentPage: number, touchLast
   if (currentPage === r.current_page) return false
   const progress = computeProgress(currentPage, r.page_count)
   const now = Date.now()
+  // 「读完」具有粘性：一旦标记读完（手动或自动），自动同步不再降级为在读；要改回请手动设置
   const status =
-    progress >= FINISHED_THRESHOLD ? 'finished' : currentPage > 0 ? 'reading' : r.status
+    r.status === 'finished' || progress >= FINISHED_THRESHOLD
+      ? 'finished'
+      : currentPage > 0
+        ? 'reading'
+        : r.status
   db.prepare(
     `UPDATE books SET current_page = ?, progress = ?, status = ?,
        last_read_at = COALESCE(?, last_read_at), updated_at = ?
