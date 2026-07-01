@@ -33,8 +33,8 @@ function defaults(): AppSettings {
     readerPath: detectSumatraExe(),
     sumatraSettingsPath: detectSumatraSettings(),
     autoSyncProgress: true,
-    scanIntervalMinutes: 0, // 默认关闭定时扫描（启动扫描 + 手动扫描已够用）
-    scanOnStartup: true
+    scanIntervalMinutes: 0, // 默认关闭定时扫描
+    scanOnStartup: false // 默认关闭启动扫描；库已建好索引，靠手动/定时扫描更新即可
   }
 }
 
