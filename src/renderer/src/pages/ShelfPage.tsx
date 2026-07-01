@@ -4,6 +4,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import type { Book, BookStatus } from '@shared/types'
 import { useLibrary } from '@/store'
 import { BookCard } from '@/components/BookCard'
+import { categoryOf } from '@/lib/format'
 import type { Page } from '@/components/Sidebar'
 
 type SortKey = 'recent' | 'title' | 'added' | 'progress'
@@ -60,18 +61,33 @@ export function ShelfPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
   const [sort, setSort] = useState<SortKey>('recent')
+  const [category, setCategory] = useState('all')
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(0)
 
+  const roots = useMemo(() => settings?.libraryPaths ?? [], [settings?.libraryPaths])
+
+  // 分类 = 顶层文件夹，按藏书量降序
+  const categories = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const b of books) {
+      if (b.missing) continue
+      const c = categoryOf(b.path, roots)
+      m.set(c, (m.get(c) ?? 0) + 1)
+    }
+    return [...m.entries()].sort((a, b) => b[1] - a[1])
+  }, [books, roots])
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     let list = books.filter((b) => !b.missing)
     if (filter !== 'all') list = list.filter((b) => b.status === filter)
+    if (category !== 'all') list = list.filter((b) => categoryOf(b.path, roots) === category)
     if (q) list = list.filter((b) => b.title.toLowerCase().includes(q) || (b.author ?? '').toLowerCase().includes(q))
     return sortBooks(list, sort)
-  }, [books, query, filter, sort])
+  }, [books, query, filter, sort, category, roots])
 
   // 测量可用宽度 → 列数与行高
   useLayoutEffect(() => {
@@ -102,7 +118,7 @@ export function ShelfPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0
     rowVirtualizer.scrollToOffset(0)
-  }, [query, filter, sort, rowVirtualizer])
+  }, [query, filter, sort, category, rowVirtualizer])
 
   const noLibrary = !loading && settings && settings.libraryPaths.length === 0
   const virtualRows = rowVirtualizer.getVirtualItems()
@@ -134,6 +150,22 @@ export function ShelfPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
             </button>
           ))}
         </div>
+
+        {categories.length > 1 && (
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="h-9 max-w-[12rem] rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-slate-300 focus:border-violet-500/50 focus:outline-none"
+            title="按分类（顶层文件夹）筛选"
+          >
+            <option value="all" className="bg-[#14141d]">全部分类</option>
+            {categories.map(([c, n]) => (
+              <option key={c} value={c} className="bg-[#14141d]">
+                {c}（{n}）
+              </option>
+            ))}
+          </select>
+        )}
 
         <select
           value={sort}

@@ -63,6 +63,24 @@ export function gradientFromString(s: string): [string, string] {
   return [`hsl(${h1} 45% 32%)`, `hsl(${h2} 50% 22%)`]
 }
 
+/**
+ * 从文件路径推导「分类」= 书库根目录下的第一层子文件夹名。
+ * 直接放在根目录下的书归为「未分类」。纯前端推导，不落库。
+ */
+export function categoryOf(path: string, roots: string[]): string {
+  const pathSlash = path.replace(/\\/g, '/')
+  const lower = pathSlash.toLowerCase()
+  for (const r of roots) {
+    const rSlash = r.replace(/\\/g, '/').replace(/\/+$/, '')
+    if (rSlash && lower.startsWith(rSlash.toLowerCase() + '/')) {
+      const rel = pathSlash.slice(rSlash.length + 1)
+      const segs = rel.split('/')
+      return segs.length > 1 ? segs[0] : '未分类'
+    }
+  }
+  return '未分类'
+}
+
 const FORMAT_LABEL: Record<string, string> = {
   pdf: 'PDF',
   epub: 'EPUB',
