@@ -174,6 +174,26 @@ export function SettingsPage() {
             </select>
           </div>
 
+          <div className="flex items-center justify-between border-t border-white/5 py-2 pt-3">
+            <div className="pr-4">
+              <div className="text-sm text-slate-200">试读时间</div>
+              <div className="text-xs text-slate-500">
+                「未读」的书若一次读不满这个时长就结束，自动保持未读（提示里可一键改为在读）；时长仍计入统计。
+              </div>
+            </div>
+            <select
+              value={s.trialMinutes}
+              onChange={(e) => void saveSettings({ trialMinutes: Number(e.target.value) })}
+              className="h-9 shrink-0 rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-slate-300 focus:border-violet-500/50 focus:outline-none"
+            >
+              <option value={0} className="bg-[#14141d]">关闭</option>
+              <option value={5} className="bg-[#14141d]">5 分钟</option>
+              <option value={10} className="bg-[#14141d]">10 分钟</option>
+              <option value={15} className="bg-[#14141d]">15 分钟</option>
+              <option value={30} className="bg-[#14141d]">30 分钟</option>
+            </select>
+          </div>
+
           <div className="border-t border-white/5 pt-3">
             <button
               onClick={() => setFmtOpen((v) => !v)}

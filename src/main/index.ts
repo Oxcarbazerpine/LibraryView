@@ -2,7 +2,7 @@ import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'node:path'
 import { writeFileSync } from 'node:fs'
 import { initDb, closeDb } from './db'
-import { closeDanglingSessions } from './sessions'
+import { closeDanglingSessions, startReading, stopReading } from './sessions'
 import { registerIpc } from './ipc'
 import { startJobs, stopJobs } from './jobs'
 import {
@@ -13,7 +13,7 @@ import {
   workerEbookCover
 } from './pdf-pool'
 import { getSettings, updateSettings, getDataDir } from './settings'
-import { listBooks } from './books'
+import { listBooks, getBook } from './books'
 import { getStats } from './stats'
 import { indexLibrary, backfillPageCounts, backfillMetadata } from './scanner'
 import { syncFromSumatra } from './sumatra'
@@ -169,6 +169,33 @@ app.whenReady().then(async () => {
       if (out) writeFileSync(out, 'WORKER ERROR: ' + (e as Error).message + '\n')
     }
     stopPdfWorker()
+    closeDb()
+    app.exit(0)
+    return
+  }
+
+  // 试读逻辑自检：未读书开读→立即停止 应回退未读；悬挂会话在重启收尾时也应回退
+  if (process.env.LV_TRIAL) {
+    const out = process.env.LV_SMOKE_OUT
+    try {
+      const book = listBooks().find((b) => b.status === 'unread' && !b.missing)
+      if (!book) throw new Error('库中没有未读的书')
+      // 用例1：开读（不真正拉起阅读器）→ 立即停止 → 时长 0 < 试读阈值 → 应回退未读
+      startReading(book.id, { launch: false })
+      const mid = getBook(book.id)?.status
+      stopReading(book.id)
+      const afterStop = getBook(book.id)?.status
+      // 用例2：再开读、不停止（模拟崩溃/强退）→ 重启收尾悬挂会话时应回退未读
+      startReading(book.id, { launch: false })
+      closeDanglingSessions()
+      const afterDangling = getBook(book.id)?.status
+      const ok = mid === 'reading' && afterStop === 'unread' && afterDangling === 'unread'
+      const report = `TRIAL ${ok ? 'ok' : 'FAIL'} | mid=${mid} afterStop=${afterStop} afterDangling=${afterDangling} | trialMinutes=${getSettings().trialMinutes}`
+      if (out) writeFileSync(out, report + '\n')
+      console.log(report)
+    } catch (e) {
+      if (out) writeFileSync(out, 'TRIAL ERROR: ' + (e as Error).message + '\n')
+    }
     closeDb()
     app.exit(0)
     return

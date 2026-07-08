@@ -71,6 +71,11 @@ export interface AppSettings {
   autoSyncProgress: boolean
   /** 阅读会话空闲多久（分钟）无翻页则自动结束；再次翻页会自动恢复。0=不自动结束 */
   idleTimeoutMinutes: number
+  /**
+   * 试读时间（分钟）：开读前为「未读」的书，若本次会话时长低于该值，
+   * 结束时自动改回「未读」（提示里可一键改为在读）。0=关闭该行为
+   */
+  trialMinutes: number
   /** 定时扫描间隔（分钟，0=关闭定时扫描） */
   scanIntervalMinutes: number
   scanOnStartup: boolean
@@ -124,10 +129,18 @@ export interface ScanProgress {
   currentPath?: string
 }
 
+/** toast 上的可选操作按钮（如试读结束后「改为在读」） */
+export interface NotifyAction {
+  label: string
+  bookId: number
+  status: BookStatus
+}
+
 /** 轻量通知（主进程 → 渲染层，渲染层用 toast 呈现） */
 export interface Notify {
   level: 'info' | 'success' | 'error'
   message: string
+  action?: NotifyAction
 }
 
 export interface FileFilter {

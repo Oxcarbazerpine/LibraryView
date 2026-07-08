@@ -88,6 +88,11 @@ const MIGRATIONS: ((d: Database.Database) => void)[] = [
   // v0 -> v1：记录 epub/mobi/azw3 等的内嵌元数据是否已抽取过，避免每次扫描重复解析。
   (d) => {
     d.exec('ALTER TABLE books ADD COLUMN meta_extracted INTEGER NOT NULL DEFAULT 0')
+  },
+  // v1 -> v2：记录会话开始前书的状态。用于「试读」：开读前是未读、读了不到
+  // 试读阈值就结束 → 自动回退为未读（落库以便应用重启后收尾悬挂会话时也能回退）。
+  (d) => {
+    d.exec('ALTER TABLE reading_sessions ADD COLUMN prev_status TEXT')
   }
 ]
 

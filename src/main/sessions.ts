@@ -14,6 +14,8 @@ interface SessionRow {
   duration_seconds: number
   start_page: number | null
   end_page: number | null
+  /** 会话开始前书的状态（v2 迁移新增；旧记录为 null） */
+  prev_status: string | null
 }
 
 function mapSession(r: SessionRow): ReadingSession {
@@ -56,7 +58,17 @@ export function getActiveSession(): ActiveSession | null {
 /** 应用重启时收尾悬挂会话：无法得知真实结束时间，按 0 时长收尾，避免污染统计。 */
 export function closeDanglingSessions(): number {
   tracker = null
-  return getDb()
+  const db = getDb()
+  // 试读回退：悬挂会话按 0 时长收尾（必然低于试读阈值），开读前是未读的书改回未读
+  if (getSettings().trialMinutes > 0) {
+    db.prepare(
+      `UPDATE books SET status = 'unread'
+       WHERE status = 'reading' AND id IN (
+         SELECT book_id FROM reading_sessions WHERE ended_at IS NULL AND prev_status = 'unread'
+       )`
+    ).run()
+  }
+  return db
     .prepare(
       'UPDATE reading_sessions SET ended_at = started_at, duration_seconds = 0 WHERE ended_at IS NULL'
     )
@@ -116,8 +128,10 @@ export function startReading(bookId: number, opts: StartOpts = {}): ActiveSessio
 
   const now = Date.now()
   const info = getDb()
-    .prepare('INSERT INTO reading_sessions (book_id, started_at, start_page) VALUES (?, ?, ?)')
-    .run(bookId, now, book.currentPage || null)
+    .prepare(
+      'INSERT INTO reading_sessions (book_id, started_at, start_page, prev_status) VALUES (?, ?, ?, ?)'
+    )
+    .run(bookId, now, book.currentPage || null, book.status)
 
   getDb()
     .prepare(
@@ -160,6 +174,28 @@ export function stopReading(bookId: number, endAt?: number): ReadingSession | nu
   ).run(duration, end, Date.now(), bookId)
 
   if (tracker?.sessionId === r.id) tracker = null
+
+  // 试读回退：开读前是未读、且本次时长低于试读阈值 → 自动改回未读（时长仍计入统计）。
+  // 手动结束与空闲自动结束都会走到这里；提示里可一键改回「在读」。
+  const { trialMinutes } = getSettings()
+  if (
+    trialMinutes > 0 &&
+    r.prev_status === 'unread' &&
+    duration < trialMinutes * 60 &&
+    book?.status === 'reading'
+  ) {
+    db.prepare("UPDATE books SET status = 'unread', updated_at = ? WHERE id = ?").run(
+      Date.now(),
+      bookId
+    )
+    const mins = duration < 60 ? `${duration} 秒` : `${Math.round(duration / 60)} 分钟`
+    const short = book.title.length > 24 ? book.title.slice(0, 24) + '…' : book.title
+    broadcast('notify', {
+      level: 'info',
+      message: `《${short}》试读 ${mins}，已保持「未读」（时长已计入统计）。`,
+      action: { label: '改为在读', bookId, status: 'reading' }
+    })
+  }
 
   broadcast('session:changed', null)
   broadcast('books:changed')

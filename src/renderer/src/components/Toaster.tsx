@@ -13,16 +13,31 @@ function ToastCard({ toast }: { toast: Toast }) {
   const { icon: Icon, cls } = STYLE[toast.level]
 
   useEffect(() => {
-    const t = setTimeout(() => dismissToast(toast.id), toast.level === 'error' ? 8000 : 5000)
+    // 带操作按钮的提示多留一会儿，给用户反悔的时间
+    const ms = toast.action ? 12000 : toast.level === 'error' ? 8000 : 5000
+    const t = setTimeout(() => dismissToast(toast.id), ms)
     return () => clearTimeout(t)
-  }, [toast.id, toast.level, dismissToast])
+  }, [toast.id, toast.level, toast.action, dismissToast])
 
   return (
     <div
       className={`animate-fade-up pointer-events-auto flex items-start gap-2.5 rounded-xl border bg-[#14141d]/95 px-3.5 py-3 shadow-xl backdrop-blur ${cls}`}
     >
       <Icon className="mt-0.5 h-4 w-4 shrink-0" />
-      <p className="flex-1 text-[13px] leading-snug text-slate-200">{toast.message}</p>
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] leading-snug text-slate-200">{toast.message}</p>
+        {toast.action && (
+          <button
+            onClick={() => {
+              void window.api.setStatus(toast.action!.bookId, toast.action!.status)
+              dismissToast(toast.id)
+            }}
+            className="mt-2 rounded-lg bg-violet-500/25 px-2.5 py-1 text-xs font-medium text-violet-200 transition-colors hover:bg-violet-500/40"
+          >
+            {toast.action.label}
+          </button>
+        )}
+      </div>
       <button
         onClick={() => dismissToast(toast.id)}
         className="shrink-0 rounded p-0.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
