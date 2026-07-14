@@ -157,7 +157,7 @@ export function SettingsPage() {
             <div className="pr-4">
               <div className="text-sm text-slate-200">空闲自动结束计时</div>
               <div className="text-xs text-slate-500">
-                阅读中若这段时间内没有翻页则自动结束计时；再次翻页会自动继续。仅对能同步进度的书生效。
+                这段时间内没有翻页、或整台电脑没有键鼠操作，就自动结束计时；关闭阅读器或系统休眠也会立即结束。能同步进度的书再次翻页会自动继续。
               </div>
             </div>
             <select

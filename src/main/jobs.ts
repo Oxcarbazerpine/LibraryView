@@ -1,10 +1,12 @@
+import { powerMonitor } from 'electron'
 import { getSettings } from './settings'
 import { runScan } from './scanner'
 import { startSumatraWatch, stopSumatraWatch } from './sumatra'
-import { checkIdleSession } from './sessions'
+import { checkIdleSession, stopActiveOnSuspend } from './sessions'
 
 let intervalTimer: ReturnType<typeof setInterval> | null = null
 let idleTimer: ReturnType<typeof setInterval> | null = null
+let suspendHooked = false
 
 function setupInterval(minutes: number): void {
   if (intervalTimer) {
@@ -29,8 +31,13 @@ function setupInterval(minutes: number): void {
 export async function startJobs(): Promise<void> {
   const s = getSettings()
   setupInterval(s.scanIntervalMinutes)
-  // 每 30 秒检查一次进行中的阅读会话是否空闲超时（基于翻页活动）
+  // 每 30 秒检查一次进行中的阅读会话是否空闲超时（翻页空闲 + 整机键鼠空闲双信号）
   if (!idleTimer) idleTimer = setInterval(() => checkIdleSession(), 30 * 1000)
+  // 系统休眠时立即结束进行中的会话（只注册一次）
+  if (!suspendHooked) {
+    suspendHooked = true
+    powerMonitor.on('suspend', () => stopActiveOnSuspend())
+  }
   await startSumatraWatch()
   if (s.scanOnStartup) void runScan()
 }

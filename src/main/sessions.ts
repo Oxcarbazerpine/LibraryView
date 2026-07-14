@@ -1,5 +1,5 @@
-import { shell } from 'electron'
-import { spawn } from 'node:child_process'
+import { shell, powerMonitor } from 'electron'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { getDb } from './db'
 import { getSettings } from './settings'
 import { getBook } from './books'
@@ -43,6 +43,20 @@ interface Tracker {
   hadActivity: boolean
 }
 let tracker: Tracker | null = null
+
+/** 本次会话拉起的阅读器进程（用于「关闭阅读器 → 自动结束计时」）。 */
+interface ReaderProc {
+  child: ChildProcess
+  bookId: number
+  spawnedAt: number
+}
+let readerProc: ReaderProc | null = null
+/** 进程存活低于该时长视为 ReuseInstance 交接（把文件交给已有窗口后立即退出），不算阅读结束。 */
+const MIN_READER_LIFE_MS = 30_000
+
+function shortTitle(t: string): string {
+  return t.length > 24 ? t.slice(0, 24) + '…' : t
+}
 
 export function getActiveSession(): ActiveSession | null {
   const r = getDb()
@@ -91,12 +105,29 @@ function launchReader(book: Book): void {
   try {
     if (reader) {
       const child = spawn(reader, [book.path], { detached: true, stdio: 'ignore' })
+      const spawnedAt = Date.now()
+      readerProc = { child, bookId: book.id, spawnedAt }
       child.on('error', (e) => {
         console.error('[session] 启动阅读器失败:', e)
+        if (readerProc?.child === child) readerProc = null
         broadcast('notify', {
           level: 'error',
           message: `无法打开《${book.title}》：所选阅读器启动失败。可在设置里为 ${book.format.toUpperCase()} 指定其它阅读器。`
         })
+      })
+      // 阅读器被关闭 → 该书会话若仍在进行则立即结束计时。
+      // 存活过短的进程是 ReuseInstance 交接（文件交给已有窗口后自身退出），不算阅读结束。
+      child.on('exit', () => {
+        if (readerProc?.child !== child) return
+        readerProc = null
+        if (Date.now() - spawnedAt < MIN_READER_LIFE_MS) return
+        if (tracker && tracker.bookId === book.id) {
+          stopReading(book.id)
+          broadcast('notify', {
+            level: 'info',
+            message: `《${shortTitle(book.title)}》阅读器已关闭，已结束计时。`
+          })
+        }
       })
       child.unref()
     } else {
@@ -231,19 +262,53 @@ export function noteReadingActivity(bookId: number): void {
   startReading(bookId, { launch: false, auto: true })
 }
 
-/** 定时检查：有活动信号的会话若空闲超过阈值，则自动结束（时长只计到最后一次翻页）。 */
+/**
+ * 定时检查（每 30 秒）：两个独立的空闲信号，任一超过阈值就自动结束会话——
+ * ① 翻页空闲（精确，仅对有 SumatraPDF 同步信号的书）：超过阈值没翻页 → 结束，时长计到最后一次翻页；
+ * ② 整机键鼠空闲（兜底，对所有会话）：整台电脑超过阈值没有任何键鼠输入（人离开了）→ 结束，
+ *    时长计到最后一次输入。覆盖无法同步进度的书/阅读器（如 Calibre 读 azw3）。
+ */
 export function checkIdleSession(): void {
-  if (!tracker || !tracker.hadActivity) return
+  if (!tracker) return
   const timeoutMs = getSettings().idleTimeoutMinutes * 60 * 1000
   if (timeoutMs <= 0) return
-  if (Date.now() - tracker.lastActivityAt > timeoutMs) {
+  const now = Date.now()
+
+  if (tracker.hadActivity && now - tracker.lastActivityAt > timeoutMs) {
     const book = getBook(tracker.bookId)
     stopReading(tracker.bookId, tracker.lastActivityAt)
     if (book) {
       broadcast('notify', {
         level: 'info',
-        message: `《${book.title}》空闲超时，已自动结束计时（再次翻页会自动继续）。`
+        message: `《${shortTitle(book.title)}》空闲超时，已自动结束计时（再次翻页会自动继续）。`
       })
     }
+    return
+  }
+
+  const idleMs = powerMonitor.getSystemIdleTime() * 1000
+  if (idleMs > timeoutMs) {
+    const book = getBook(tracker.bookId)
+    const endAt = Math.max(tracker.startedAt, now - idleMs)
+    stopReading(tracker.bookId, endAt)
+    if (book) {
+      broadcast('notify', {
+        level: 'info',
+        message: `《${shortTitle(book.title)}》长时间无键鼠操作，已自动结束计时。`
+      })
+    }
+  }
+}
+
+/** 系统休眠（合盖/睡眠）时立即结束进行中的会话，避免睡一晚全算成阅读时长。 */
+export function stopActiveOnSuspend(): void {
+  if (!tracker) return
+  const book = getBook(tracker.bookId)
+  stopReading(tracker.bookId)
+  if (book) {
+    broadcast('notify', {
+      level: 'info',
+      message: `《${shortTitle(book.title)}》因系统休眠已结束计时。`
+    })
   }
 }
