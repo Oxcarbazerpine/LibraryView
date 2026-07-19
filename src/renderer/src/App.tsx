@@ -3,6 +3,7 @@ import { LibraryProvider, useLibrary } from './store'
 import { Sidebar, type Page } from './components/Sidebar'
 import { DiscoverPage } from './pages/DiscoverPage'
 import { ShelfPage } from './pages/ShelfPage'
+import { SeriesPage } from './pages/SeriesPage'
 import { StatsPage } from './pages/StatsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { Toaster } from './components/Toaster'
@@ -28,6 +29,7 @@ function Shell() {
         <div className="relative z-10 h-full">
           {page === 'discover' && <DiscoverPage onNavigate={setPage} />}
           {page === 'shelf' && <ShelfPage onNavigate={setPage} />}
+          {page === 'series' && <SeriesPage />}
           {page === 'stats' && <StatsPage />}
           {page === 'settings' && <SettingsPage />}
         </div>

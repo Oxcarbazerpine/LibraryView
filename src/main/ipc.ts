@@ -4,6 +4,7 @@ import { getSettings, updateSettings, getDataDir } from './settings'
 import * as books from './books'
 import * as sessions from './sessions'
 import { getStats } from './stats'
+import { listSeries, addSeries, removeSeries, detectSeriesCandidates } from './series'
 import { runScan } from './scanner'
 import { ensureCover, clearCoverCache } from './covers'
 import { reconfigureJobs, stopJobs } from './jobs'
@@ -58,6 +59,20 @@ export function registerIpc(): void {
   ipcMain.handle('session:list', (_e, bookId: number) => sessions.listSessions(bookId))
 
   ipcMain.handle('stats:get', (_e, rangeDays?: number) => getStats(rangeDays ?? 30))
+
+  // 系列（多卷套装归组）
+  ipcMain.handle('series:list', () => listSeries())
+  ipcMain.handle('series:add', (_e, folder: string, name: string) => {
+    const r = addSeries(folder, name)
+    broadcast('books:changed')
+    return r
+  })
+  ipcMain.handle('series:remove', (_e, id: number) => {
+    const r = removeSeries(id)
+    broadcast('books:changed')
+    return r
+  })
+  ipcMain.handle('series:candidates', () => detectSeriesCandidates())
 
   ipcMain.handle('shell:reveal', (_e, p: string) => {
     if (p) shell.showItemInFolder(p)

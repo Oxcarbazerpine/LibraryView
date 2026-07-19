@@ -13,7 +13,7 @@ import {
   workerEbookCover
 } from './pdf-pool'
 import { getSettings, updateSettings, getDataDir } from './settings'
-import { listBooks, getBook } from './books'
+import { listBooks, getBook, applyProgressByPath } from './books'
 import { getStats } from './stats'
 import { indexLibrary, backfillPageCounts, backfillMetadata } from './scanner'
 import { syncFromSumatra } from './sumatra'
@@ -185,16 +185,42 @@ app.whenReady().then(async () => {
       const mid = getBook(book.id)?.status
       stopReading(book.id)
       const afterStop = getBook(book.id)?.status
-      // 用例2：再开读、不停止（模拟崩溃/强退）→ 重启收尾悬挂会话时应回退未读
+      // 用例2：试读回退后 Sumatra 退出时的批量回写送来新页码 → 状态必须保持未读
+      applyProgressByPath(book.path, (book.currentPage || 0) + 3, true)
+      const afterLateSync = getBook(book.id)?.status
+      // 用例3：再开读、不停止（模拟崩溃/强退）→ 重启收尾悬挂会话时应回退未读
       startReading(book.id, { launch: false })
       closeDanglingSessions()
       const afterDangling = getBook(book.id)?.status
-      const ok = mid === 'reading' && afterStop === 'unread' && afterDangling === 'unread'
-      const report = `TRIAL ${ok ? 'ok' : 'FAIL'} | mid=${mid} afterStop=${afterStop} afterDangling=${afterDangling} | trialMinutes=${getSettings().trialMinutes}`
+      const ok =
+        mid === 'reading' &&
+        afterStop === 'unread' &&
+        afterLateSync === 'unread' &&
+        afterDangling === 'unread'
+      const report = `TRIAL ${ok ? 'ok' : 'FAIL'} | mid=${mid} afterStop=${afterStop} afterLateSync=${afterLateSync} afterDangling=${afterDangling} | trialMinutes=${getSettings().trialMinutes}`
       if (out) writeFileSync(out, report + '\n')
       console.log(report)
     } catch (e) {
       if (out) writeFileSync(out, 'TRIAL ERROR: ' + (e as Error).message + '\n')
+    }
+    closeDb()
+    app.exit(0)
+    return
+  }
+
+  // 系列候选检测自检：打印启发式找到的套装候选
+  if (process.env.LV_SERIES) {
+    const out = process.env.LV_SMOKE_OUT
+    try {
+      const { detectSeriesCandidates } = await import('./series')
+      const cands = detectSeriesCandidates()
+      const report =
+        `SERIES candidates ${cands.length}\n` +
+        cands.map((c) => `  ${c.bookCount} 册 | ${c.name} | ${c.folder}`).join('\n')
+      if (out) writeFileSync(out, report + '\n')
+      console.log(report)
+    } catch (e) {
+      if (out) writeFileSync(out, 'SERIES ERROR: ' + (e as Error).message + '\n')
     }
     closeDb()
     app.exit(0)

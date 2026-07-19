@@ -26,6 +26,11 @@ const api: LibraryViewApi = {
 
   getStats: (rangeDays) => ipcRenderer.invoke('stats:get', rangeDays),
 
+  listSeries: () => ipcRenderer.invoke('series:list'),
+  addSeries: (folder, name) => ipcRenderer.invoke('series:add', folder, name),
+  removeSeries: (id) => ipcRenderer.invoke('series:remove', id),
+  seriesCandidates: () => ipcRenderer.invoke('series:candidates'),
+
   ensureCover: (id) => ipcRenderer.invoke('cover:ensure', id),
   clearCoverCache: () => ipcRenderer.invoke('cover:clearCache'),
   revealInFolder: (path) => ipcRenderer.invoke('shell:reveal', path),

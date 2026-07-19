@@ -1,5 +1,14 @@
 import { useState, useEffect, type ReactNode } from 'react'
-import { FolderOpen, Plus, X, RotateCw, FileText, FolderTree, Database, ChevronDown } from 'lucide-react'
+import {
+  FolderOpen,
+  Plus,
+  X,
+  RotateCw,
+  FileText,
+  FolderTree,
+  Database,
+  ChevronDown
+} from 'lucide-react'
 import type { BookFormat } from '@shared/types'
 import { useLibrary } from '@/store'
 
@@ -7,7 +16,8 @@ const FORMAT_READERS: { id: BookFormat; label: string }[] = [
   { id: 'pdf', label: 'PDF' },
   { id: 'epub', label: 'EPUB' },
   { id: 'mobi', label: 'MOBI' },
-  { id: 'azw3', label: 'AZW3' }
+  { id: 'azw3', label: 'AZW3' },
+  { id: 'txt', label: 'TXT' }
 ]
 
 export function SettingsPage() {

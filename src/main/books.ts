@@ -179,13 +179,11 @@ export function applyProgressByPath(
   if (currentPage === r.current_page) return null
   const progress = computeProgress(currentPage, r.page_count)
   const now = Date.now()
-  // 「读完」具有粘性：一旦标记读完（手动或自动），自动同步不再降级为在读；要改回请手动设置
+  // 进度同步只管页码/进度，不把未读提升为在读——状态归 会话/试读/手动 三处管理。
+  // 否则 Sumatra 退出时的批量回写会在「试读回退为未读」之后又把书翻回在读。
+  // 「读完」保留：达到阈值自动判完，且一旦读完不再降级（要改回请手动设置）。
   const status =
-    r.status === 'finished' || progress >= FINISHED_THRESHOLD
-      ? 'finished'
-      : currentPage > 0
-        ? 'reading'
-        : r.status
+    r.status === 'finished' || progress >= FINISHED_THRESHOLD ? 'finished' : r.status
   db.prepare(
     `UPDATE books SET current_page = ?, progress = ?, status = ?,
        last_read_at = COALESCE(?, last_read_at), updated_at = ?

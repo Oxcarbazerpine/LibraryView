@@ -4,6 +4,13 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import type { Book, BookStatus } from '@shared/types'
 import { useLibrary } from '@/store'
 import { BookCard } from '@/components/BookCard'
+import {
+  SeriesCard,
+  SeriesModal,
+  groupBySeries,
+  seriesSortKeys,
+  type ShelfItem
+} from '@/components/SeriesCard'
 import { categoryOf } from '@/lib/format'
 import type { Page } from '@/components/Sidebar'
 
@@ -27,19 +34,36 @@ const SORTS: { id: SortKey; label: string }[] = [
 // 复用同一个 Collator（比每次 localeCompare 快得多，6000+ 本排序明显改善）
 const collator = new Intl.Collator('zh')
 
-function sortBooks(books: Book[], key: SortKey): Book[] {
-  const arr = [...books]
+interface ItemKeys {
+  lastReadAt: number
+  addedAt: number
+  progress: number
+  title: string
+}
+
+function keysOf(it: ShelfItem): ItemKeys {
+  if (it.kind === 'series') return seriesSortKeys(it.group)
+  const b = it.book
+  return { lastReadAt: b.lastReadAt ?? 0, addedAt: b.addedAt, progress: b.progress, title: b.title }
+}
+
+function sortItems(items: ShelfItem[], key: SortKey): ShelfItem[] {
+  const arr = items.map((it) => ({ it, k: keysOf(it) }))
   switch (key) {
     case 'title':
-      return arr.sort((a, b) => collator.compare(a.title, b.title))
+      arr.sort((a, b) => collator.compare(a.k.title, b.k.title))
+      break
     case 'added':
-      return arr.sort((a, b) => b.addedAt - a.addedAt)
+      arr.sort((a, b) => b.k.addedAt - a.k.addedAt)
+      break
     case 'progress':
-      return arr.sort((a, b) => b.progress - a.progress)
+      arr.sort((a, b) => b.k.progress - a.k.progress)
+      break
     case 'recent':
     default:
-      return arr.sort((a, b) => (b.lastReadAt ?? 0) - (a.lastReadAt ?? 0) || collator.compare(a.title, b.title))
+      arr.sort((a, b) => b.k.lastReadAt - a.k.lastReadAt || collator.compare(a.k.title, b.k.title))
   }
+  return arr.map((x) => x.it)
 }
 
 const SCAN_LABEL: Record<string, string> = {
@@ -57,11 +81,12 @@ const MIN_COL = 150
 const TEXT_H = 92 // 封面下方标题/作者/进度区高度估计
 
 export function ShelfPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
-  const { books, loading, scan, settings, rescan } = useLibrary()
+  const { books, series, loading, scan, settings, rescan } = useLibrary()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
   const [sort, setSort] = useState<SortKey>('recent')
   const [category, setCategory] = useState('all')
+  const [openSeriesId, setOpenSeriesId] = useState<number | null>(null)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -86,8 +111,27 @@ export function ShelfPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
     if (filter !== 'all') list = list.filter((b) => b.status === filter)
     if (category !== 'all') list = list.filter((b) => categoryOf(b.path, roots) === category)
     if (q) list = list.filter((b) => b.title.toLowerCase().includes(q) || (b.author ?? '').toLowerCase().includes(q))
-    return sortBooks(list, sort)
-  }, [books, query, filter, sort, category, roots])
+    return list
+  }, [books, query, filter, category, roots])
+
+  // 搜索时展开为单卷（能搜到套装里的某一卷）；平时按已确认的系列归组
+  const items = useMemo(() => {
+    const grouped = query.trim()
+      ? filtered.map((b) => ({ kind: 'book' as const, book: b }))
+      : groupBySeries(filtered, series)
+    return sortItems(grouped, sort)
+  }, [filtered, series, query, sort])
+
+  // 弹窗里的系列始终显示全部卷（不受状态筛选影响），并随 books 实时更新
+  const openGroup = useMemo(() => {
+    if (openSeriesId == null) return null
+    const all = groupBySeries(
+      books.filter((b) => !b.missing),
+      series
+    )
+    const hit = all.find((it) => it.kind === 'series' && it.group.series.id === openSeriesId)
+    return hit && hit.kind === 'series' ? hit.group : null
+  }, [openSeriesId, books, series])
 
   // 测量可用宽度 → 列数与行高
   useLayoutEffect(() => {
@@ -102,7 +146,7 @@ export function ShelfPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
   const cols = Math.max(1, Math.floor((width + GAP_X) / (MIN_COL + GAP_X)))
   const cardW = cols > 0 && width > 0 ? (width - (cols - 1) * GAP_X) / cols : MIN_COL
   const rowHeight = Math.ceil((cardW * 4) / 3 + TEXT_H + GAP_Y)
-  const rowCount = Math.ceil(filtered.length / cols)
+  const rowCount = Math.ceil(items.length / cols)
 
   const rowVirtualizer = useVirtualizer({
     count: rowCount,
@@ -231,7 +275,7 @@ export function ShelfPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
                 </button>
               }
             />
-          ) : filtered.length === 0 ? (
+          ) : items.length === 0 ? (
             <EmptyState
               icon={<BookMarked className="h-10 w-10" />}
               title={query || filter !== 'all' ? '没有匹配的书籍' : '书库为空'}
@@ -241,7 +285,7 @@ export function ShelfPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
             <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
               {virtualRows.map((vr) => {
                 const start = vr.index * cols
-                const rowItems = filtered.slice(start, start + cols)
+                const rowItems = items.slice(start, start + cols)
                 return (
                   <div
                     key={vr.key}
@@ -255,9 +299,17 @@ export function ShelfPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
                       columnGap: GAP_X
                     }}
                   >
-                    {rowItems.map((b) => (
-                      <BookCard key={b.id} book={b} />
-                    ))}
+                    {rowItems.map((it) =>
+                      it.kind === 'book' ? (
+                        <BookCard key={`b${it.book.id}`} book={it.book} />
+                      ) : (
+                        <SeriesCard
+                          key={`s${it.group.series.id}`}
+                          group={it.group}
+                          onOpen={() => setOpenSeriesId(it.group.series.id)}
+                        />
+                      )
+                    )}
                   </div>
                 )
               })}
@@ -265,6 +317,8 @@ export function ShelfPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
           )}
         </div>
       </div>
+
+      {openGroup && <SeriesModal group={openGroup} onClose={() => setOpenSeriesId(null)} />}
     </div>
   )
 }

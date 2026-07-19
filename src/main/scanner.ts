@@ -21,7 +21,8 @@ const EXT_FORMAT: Record<string, BookFormat> = {
   '.mobi': 'mobi',
   '.azw3': 'azw3',
   '.djvu': 'djvu',
-  '.cbz': 'cbz'
+  '.cbz': 'cbz',
+  '.txt': 'txt' // SumatraPDF 原生支持纯文本，进度同步照常
 }
 
 const SKIP_DIRS = new Set(['$RECYCLE.BIN', 'System Volume Information', 'node_modules'])
@@ -81,11 +82,18 @@ export async function indexLibrary(
       const mtime = Math.round(st.mtimeMs)
       seen.push(file)
 
+      const format = EXT_FORMAT[extname(file).toLowerCase()] ?? 'other'
+      // 过小的 txt 是说明/垃圾文件而非书（库内最小的真书约 12KB），跳过
+      if (format === 'txt' && st.size < 5 * 1024) {
+        seen.pop()
+        processed++
+        continue
+      }
+
       const existing = index.get(file)
       const unchanged =
         !!existing && existing.missing === 0 && existing.fileSize === st.size && existing.fileMtime === mtime
       if (!unchanged) {
-        const format = EXT_FORMAT[extname(file).toLowerCase()] ?? 'other'
         const res = upsertScannedBook({
           path: file,
           title: titleFromFilename(file),

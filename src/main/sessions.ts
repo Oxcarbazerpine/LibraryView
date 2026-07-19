@@ -1,5 +1,6 @@
 import { shell, powerMonitor } from 'electron'
-import { spawn, type ChildProcess } from 'node:child_process'
+import { spawn, exec, type ChildProcess } from 'node:child_process'
+import { basename } from 'node:path'
 import { getDb } from './db'
 import { getSettings } from './settings'
 import { getBook } from './books'
@@ -41,8 +42,26 @@ interface Tracker {
   startedAt: number
   lastActivityAt: number
   hadActivity: boolean
+  /**
+   * 本次会话收到的实时翻页信号数。SumatraPDF 并非每翻页就写盘（主要在关文档/退出时
+   * 批量回写），所以「没收到信号」不能证明「没在读」。只有信号足够多（≥3，说明这本书
+   * 的写盘管道确实活跃）时，才允许把「翻页空闲」用作停止判据；否则它只做保活/进度。
+   */
+  signalCount: number
+  /** 对应阅读器的进程名（如 SumatraPDF.exe），用于存活轮询；系统默认程序打开时为 null */
+  readerExe: string | null
 }
 let tracker: Tracker | null = null
+
+/** 「翻页空闲」参与停止判定所需的最少实时信号数。 */
+const PAGE_IDLE_MIN_SIGNALS = 3
+
+/**
+ * 最近一次因空闲被自动结束的会话。只有这本书在窗口期内再次出现翻页信号才自动恢复会话；
+ * 冷信号（如 Sumatra 关闭时对多本书的批量回写）不再凭空拉起会话。
+ */
+let lastAutoStop: { bookId: number; at: number } | null = null
+const RESUME_WINDOW_MS = 30 * 60 * 1000
 
 /** 本次会话拉起的阅读器进程（用于「关闭阅读器 → 自动结束计时」）。 */
 interface ReaderProc {
@@ -56,6 +75,27 @@ const MIN_READER_LIFE_MS = 30_000
 
 function shortTitle(t: string): string {
   return t.length > 24 ? t.slice(0, 24) + '…' : t
+}
+
+/** 该书按当前设置会由哪个阅读器打开（进程名，用于存活轮询）。 */
+function resolveReaderExe(book: Book): string | null {
+  const s = getSettings()
+  const reader = s.readerByFormat?.[book.format] || s.readerPath
+  return reader ? basename(reader) : null
+}
+
+/** Windows 下按进程名查询是否仍在运行。查询失败按「运行中」处理，避免误停。 */
+function isProcessRunning(exeName: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    exec(
+      `tasklist /FI "IMAGENAME eq ${exeName}" /NH`,
+      { windowsHide: true },
+      (err, stdout) => {
+        if (err) return resolve(true)
+        resolve(stdout.toLowerCase().includes(exeName.toLowerCase()))
+      }
+    )
+  })
 }
 
 export function getActiveSession(): ActiveSession | null {
@@ -171,7 +211,15 @@ export function startReading(bookId: number, opts: StartOpts = {}): ActiveSessio
     .run(now, bookId)
 
   const sessionId = Number(info.lastInsertRowid)
-  tracker = { sessionId, bookId, startedAt: now, lastActivityAt: now, hadActivity: auto }
+  tracker = {
+    sessionId,
+    bookId,
+    startedAt: now,
+    lastActivityAt: now,
+    hadActivity: auto,
+    signalCount: auto ? 1 : 0,
+    readerExe: resolveReaderExe(book)
+  }
 
   if (launch) launchReader(book)
 
@@ -237,16 +285,18 @@ export function stopReading(bookId: number, endAt?: number): ReadingSession | nu
  * 收到某书的翻页活动（来自 SumatraPDF 实时同步）：
  * - 正是当前在读的书 → 刷新活动时间（保活）
  * - 在读的是另一本 → 用户在阅读器里换了书：结束旧会话、自动开始新会话
- * - 当前没有进行中的会话 → 自动开始（恢复阅读状态），不重复拉起阅读器
+ * - 没有进行中的会话 → 仅当这本书**刚被空闲自动结束**（窗口期内）才恢复会话；
+ *   其余冷信号（如 Sumatra 关闭时的批量回写）只同步进度，不凭空开会话
  */
 export function noteReadingActivity(bookId: number): void {
   const now = Date.now()
   if (tracker) {
     if (tracker.bookId === bookId) {
       tracker.lastActivityAt = now
+      tracker.signalCount++
       if (!tracker.hadActivity) {
         tracker.hadActivity = true
-        // 让 UI 知道此会话现在可被空闲自动结束（tracked 变为 true）
+        // 让 UI 知道此会话现在有活动信号（tracked 变为 true）
         broadcast('session:changed', {
           sessionId: tracker.sessionId,
           bookId,
@@ -258,8 +308,13 @@ export function noteReadingActivity(bookId: number): void {
     }
     // 换书：结束旧的（计到它最后一次活动），再开新的
     stopReading(tracker.bookId, tracker.lastActivityAt)
+    startReading(bookId, { launch: false, auto: true })
+    return
   }
-  startReading(bookId, { launch: false, auto: true })
+  if (lastAutoStop && lastAutoStop.bookId === bookId && now - lastAutoStop.at < RESUME_WINDOW_MS) {
+    lastAutoStop = null
+    startReading(bookId, { launch: false, auto: true })
+  }
 }
 
 /**
@@ -274,9 +329,14 @@ export function checkIdleSession(): void {
   if (timeoutMs <= 0) return
   const now = Date.now()
 
-  if (tracker.hadActivity && now - tracker.lastActivityAt > timeoutMs) {
-    const book = getBook(tracker.bookId)
-    stopReading(tracker.bookId, tracker.lastActivityAt)
+  // ① 翻页空闲：仅当本次会话信号足够多（写盘管道确实活跃）才作为停止判据，
+  //    否则 Sumatra「只在关文档时写盘」会导致读得好好的被误停。
+  if (tracker.signalCount >= PAGE_IDLE_MIN_SIGNALS && now - tracker.lastActivityAt > timeoutMs) {
+    const bookId = tracker.bookId
+    const book = getBook(bookId)
+    const endAt = tracker.lastActivityAt
+    stopReading(bookId, endAt)
+    lastAutoStop = { bookId, at: now }
     if (book) {
       broadcast('notify', {
         level: 'info',
@@ -286,11 +346,14 @@ export function checkIdleSession(): void {
     return
   }
 
+  // ② 整机键鼠空闲：人离开了，对所有书/阅读器生效
   const idleMs = powerMonitor.getSystemIdleTime() * 1000
   if (idleMs > timeoutMs) {
-    const book = getBook(tracker.bookId)
+    const bookId = tracker.bookId
+    const book = getBook(bookId)
     const endAt = Math.max(tracker.startedAt, now - idleMs)
-    stopReading(tracker.bookId, endAt)
+    stopReading(bookId, endAt)
+    lastAutoStop = { bookId, at: now }
     if (book) {
       broadcast('notify', {
         level: 'info',
@@ -300,11 +363,38 @@ export function checkIdleSession(): void {
   }
 }
 
+/**
+ * 阅读器存活轮询（每 30 秒）：拉起的阅读器进程已不存在 → 立即结束会话。
+ * 弥补 ReuseInstance 场景——我们 spawn 的进程把文件交给已有窗口后立刻退出，
+ * child 的 exit 事件探测不到「用户关闭了阅读器」，只能按进程名轮询。
+ */
+const READER_POLL_GRACE_MS = 60_000
+
+export async function checkReaderClosed(): Promise<void> {
+  if (!tracker || !tracker.readerExe) return
+  if (Date.now() - tracker.startedAt < READER_POLL_GRACE_MS) return
+  const bookId = tracker.bookId
+  const running = await isProcessRunning(tracker.readerExe)
+  // await 期间会话可能已经变化，重新校验后再动手
+  if (!running && tracker && tracker.bookId === bookId) {
+    const book = getBook(bookId)
+    stopReading(bookId)
+    if (book) {
+      broadcast('notify', {
+        level: 'info',
+        message: `《${shortTitle(book.title)}》阅读器已关闭，已结束计时。`
+      })
+    }
+  }
+}
+
 /** 系统休眠（合盖/睡眠）时立即结束进行中的会话，避免睡一晚全算成阅读时长。 */
 export function stopActiveOnSuspend(): void {
   if (!tracker) return
   const book = getBook(tracker.bookId)
-  stopReading(tracker.bookId)
+  const bookId = tracker.bookId
+  stopReading(bookId)
+  lastAutoStop = { bookId, at: Date.now() } // 唤醒后继续翻页可自动恢复会话
   if (book) {
     broadcast('notify', {
       level: 'info',

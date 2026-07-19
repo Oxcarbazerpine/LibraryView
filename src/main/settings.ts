@@ -34,7 +34,7 @@ function defaults(): AppSettings {
     readerByFormat: {},
     sumatraSettingsPath: detectSumatraSettings(),
     autoSyncProgress: true,
-    idleTimeoutMinutes: 5, // 阅读会话空闲 5 分钟无翻页则自动结束
+    idleTimeoutMinutes: 10, // 整机无键鼠操作超过该时长自动结束会话（读大段内容不翻页是常事，别太灵敏）
     trialMinutes: 10, // 试读不足 10 分钟结束 → 自动改回未读（可一键反悔）
     scanIntervalMinutes: 0, // 默认关闭定时扫描
     scanOnStartup: false // 默认关闭启动扫描；库已建好索引，靠手动/定时扫描更新即可

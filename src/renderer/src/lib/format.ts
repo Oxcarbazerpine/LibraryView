@@ -88,6 +88,7 @@ const FORMAT_LABEL: Record<string, string> = {
   azw3: 'AZW3',
   djvu: 'DjVu',
   cbz: 'CBZ',
+  txt: 'TXT',
   other: '其他'
 }
 export function formatLabel(fmt: string): string {

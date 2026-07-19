@@ -14,6 +14,7 @@ import type {
   BookStatus,
   Notify,
   ScanProgress,
+  Series,
   StatsSummary
 } from '@shared/types'
 
@@ -23,6 +24,7 @@ export interface Toast extends Notify {
 
 interface LibraryState {
   books: Book[]
+  series: Series[]
   settings: AppSettings | null
   stats: StatsSummary | null
   active: ActiveSession | null
@@ -38,6 +40,7 @@ interface LibraryState {
   stopReading: (id: number) => Promise<void>
   setStatus: (id: number, status: BookStatus) => Promise<void>
   setProgress: (id: number, page: number) => Promise<void>
+  refreshSeries: () => Promise<void>
   openDetail: (id: number) => void
   closeDetail: () => void
   dismissToast: (id: number) => void
@@ -53,6 +56,7 @@ export function useLibrary(): LibraryState {
 
 export function LibraryProvider({ children }: { children: ReactNode }) {
   const [books, setBooks] = useState<Book[]>([])
+  const [series, setSeries] = useState<Series[]>([])
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [stats, setStats] = useState<StatsSummary | null>(null)
   const [active, setActive] = useState<ActiveSession | null>(null)
@@ -75,15 +79,17 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true
     void (async () => {
-      const [b, s, a] = await Promise.all([
+      const [b, s, a, sr] = await Promise.all([
         window.api.listBooks(),
         window.api.getSettings(),
-        window.api.getActiveSession()
+        window.api.getActiveSession(),
+        window.api.listSeries()
       ])
       if (!mounted) return
       setBooks(b)
       setSettings(s)
       setActive(a)
+      setSeries(sr)
       setLoading(false)
     })()
     return () => {
@@ -162,6 +168,9 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     },
     [refreshBooks]
   )
+  const refreshSeries = useCallback(async () => {
+    setSeries(await window.api.listSeries())
+  }, [])
   const openDetail = useCallback((id: number) => setDetailBookId(id), [])
   const closeDetail = useCallback(() => setDetailBookId(null), [])
 
@@ -169,6 +178,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider
       value={{
         books,
+        series,
         settings,
         stats,
         active,
@@ -184,6 +194,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         stopReading,
         setStatus,
         setProgress,
+        refreshSeries,
         openDetail,
         closeDetail,
         dismissToast

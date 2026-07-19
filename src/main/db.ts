@@ -93,6 +93,18 @@ const MIGRATIONS: ((d: Database.Database) => void)[] = [
   // 试读阈值就结束 → 自动回退为未读（落库以便应用重启后收尾悬挂会话时也能回退）。
   (d) => {
     d.exec('ALTER TABLE reading_sessions ADD COLUMN prev_status TEXT')
+  },
+  // v2 -> v3：系列（多卷套装）。folder 为绝对路径前缀，路径在其下（含嵌套）的书都属该系列；
+  // 只由用户在候选列表里确认后写入，程序不自动归组。
+  (d) => {
+    d.exec(`
+      CREATE TABLE IF NOT EXISTS series (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        folder     TEXT NOT NULL UNIQUE,
+        name       TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )
+    `)
   }
 ]
 

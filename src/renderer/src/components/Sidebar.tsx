@@ -1,12 +1,13 @@
-import { Compass, LibraryBig, BarChart3, Settings2, Square, type LucideIcon } from 'lucide-react'
+import { Compass, LibraryBig, Layers, BarChart3, Settings2, Square, type LucideIcon } from 'lucide-react'
 import { useLibrary } from '@/store'
 import { Waveform } from './Waveform'
 
-export type Page = 'discover' | 'shelf' | 'stats' | 'settings'
+export type Page = 'discover' | 'shelf' | 'series' | 'stats' | 'settings'
 
 const NAV: { id: Page; label: string; icon: LucideIcon }[] = [
   { id: 'discover', label: '发现', icon: Compass },
   { id: 'shelf', label: '书架墙', icon: LibraryBig },
+  { id: 'series', label: '系列', icon: Layers },
   { id: 'stats', label: '统计', icon: BarChart3 },
   { id: 'settings', label: '设置', icon: Settings2 }
 ]

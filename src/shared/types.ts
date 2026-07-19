@@ -3,7 +3,7 @@
  * 时间戳统一用毫秒级 epoch（number），便于 JSON 透传与排序。
  */
 
-export type BookFormat = 'pdf' | 'epub' | 'mobi' | 'azw3' | 'djvu' | 'cbz' | 'other'
+export type BookFormat = 'pdf' | 'epub' | 'mobi' | 'azw3' | 'djvu' | 'cbz' | 'txt' | 'other'
 
 export type BookStatus = 'unread' | 'reading' | 'finished'
 
@@ -143,6 +143,22 @@ export interface Notify {
   action?: NotifyAction
 }
 
+/** 已确认的系列（一套书）：folder 是绝对路径前缀，路径在其下的所有书都属于该系列 */
+export interface Series {
+  id: number
+  folder: string
+  name: string
+}
+
+/** 检测出的系列候选（用户确认后才生效） */
+export interface SeriesCandidate {
+  folder: string
+  /** 建议的系列名（取自文件夹名） */
+  name: string
+  /** 该文件夹（含嵌套）下的书籍数量 */
+  bookCount: number
+}
+
 export interface FileFilter {
   name: string
   extensions: string[]
@@ -182,6 +198,12 @@ export interface LibraryViewApi {
 
   // 在系统文件管理器中定位该文件
   revealInFolder: (path: string) => Promise<void>
+
+  // 系列（多卷套装归组）
+  listSeries: () => Promise<Series[]>
+  addSeries: (folder: string, name: string) => Promise<Series[]>
+  removeSeries: (id: number) => Promise<Series[]>
+  seriesCandidates: () => Promise<SeriesCandidate[]>
 
   // 数据目录（数据库 + 封面所在的根目录；更改后会迁移旧数据并重启生效）
   getDataDir: () => Promise<string>
